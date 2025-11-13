@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gen AI News Digest - {{ date }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .stat {
+            text-align: center;
+        }
+        
+        .stat a {
+            text-decoration: none;
+            color: inherit;
+            display: block;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .stat a:hover {
+            background: rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+        
+        .stat-number {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .section {
+            margin-bottom: 50px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 0;
+        }
+        
+        .section-icon {
+            font-size: 1.5em;
+            margin-right: 12px;
+        }
+        
+        .section-title {
+            font-size: 2em;
+            font-weight: 700;
+            color: #1d1d1f;
+            letter-spacing: -0.5px;
+        }
+        
+        .section-count {
+            margin-left: auto;
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .items {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 24px;
+        }
+        
+        .item {
+            background: #fff;
+            border: none;
+            border-radius: 12px;
+            padding: 24px;
+            transition: all 0.3s ease;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .item:hover {
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+            transform: translateY(-4px);
+        }
+        
+        .item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .item-title {
+            font-size: 1.15em;
+            font-weight: 600;
+            color: #1d1d1f;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        
+        .item-title a {
+            color: #1d1d1f;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+        
+        .item-title a:hover {
+            color: #667eea;
+        }
+        
+        .item-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 0.9em;
+            white-space: nowrap;
+        }
+        
+        .item-description {
+            color: #6e6e73;
+            margin-bottom: 16px;
+            line-height: 1.6;
+            font-size: 0.95em;
+            flex: 1;
+        }
+        
+        .item-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 0.85em;
+            color: #86868b;
+            margin-top: auto;
+            padding-top: 16px;
+        }
+        
+        .meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        .meta-icon {
+            color: #667eea;
+        }
+        
+        .language-tag {
+            background: #f5f5f7;
+            color: #1d1d1f;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+        
+        .topic-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .topic-tag {
+            background: #f5f5f7;
+            color: #1d1d1f;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.75em;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        
+        .context-badge {
+            display: inline-block;
+            background: #f5f5f7;
+            color: #1d1d1f;
+            padding: 4px 12px;
+            border-radius: 16px;
+            font-size: 0.75em;
+            font-weight: 500;
+            margin-bottom: 0;
+        }
+        
+        .arxiv-badge {
+            background: #e8f5e9;
+            color: #2e7d32;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+        
+        footer {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+        
+        footer a:hover {
+            text-decoration: underline;
+        }
+        
+        .creator-info {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #667eea;
+        }
+        
+        .creator-info h3 {
+            color: #667eea;
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        
+        .creator-info p {
+            font-size: 0.95em;
+            line-height: 1.8;
+        }
+        
+        .creator-link {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            padding: 8px 20px;
+            border-radius: 20px;
+            margin-top: 10px;
+            font-weight: 600;
+            transition: transform 0.3s ease;
+        }
+        
+        .creator-link:hover {
+            transform: scale(1.05);
+            text-decoration: none !important;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+            
+            .stats {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .items {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="font-size: 0.9em; margin-bottom: 10px; opacity: 0.95;">
+                <strong>Yuval Avidani</strong> • AI Builder & Speaker • <a href="https://yuv.ai" target="_blank" style="color: white; text-decoration: underline;">YUV.AI</a>
+            </div>
+            <h1>🤖 YUV.AI Developers AI Trends</h1>
+            <p>{{ date }} • {{ time_range }} Update</p>
+        </header>
+        
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-number">{{ stats.total_items }}</div>
+                <div class="stat-label">Total Items</div>
+            </div>
+            <div class="stat">
+                <a href="#github-trending">
+                    <div class="stat-number">{{ stats.github_repos }}</div>
+                    <div class="stat-label">GitHub Repos</div>
+                </a>
+            </div>
+            <div class="stat">
+                <a href="#hf-papers">
+                    <div class="stat-number">{{ stats.papers }}</div>
+                    <div class="stat-label">Papers</div>
+                </a>
+            </div>
+            <div class="stat">
+                <a href="#hf-spaces">
+                    <div class="stat-number">{{ stats.spaces }}</div>
+                    <div class="stat-label">HF Spaces</div>
+                </a>
+            </div>
+        </div>
+        
+        <div class="content">
+            {% if grouped_items.github_trending %}
+            <section class="section" id="github-trending">
+                <div class="section-header">
+                    <span class="section-icon">🔥</span>
+                    <h2 class="section-title">GitHub Trending</h2>
+                    <span class="section-count">{{ grouped_items.github_trending|length }}</span>
+                </div>
+                <div class="items">
+                    {% for item in grouped_items.github_trending %}
+                    <div class="item">
+                        <div class="item-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                            <div style="flex: 1;">
+                                <div class="item-title">
+                                    <a href="{{ item.url }}" target="_blank">{{ item.name }}</a>
+                                </div>
+                            </div>
+                            <div style="text-align: right; margin-left: 16px;">
+                                {% if item.stars %}
+                                <div style="font-size: 1.2em; font-weight: bold; color: #667eea;">
+                                    ⭐ {{ "{:,}".format(item.stars) }}
+                                </div>
+                                {% endif %}
+                                {% if item.stars_today %}
+                                <div style="font-size: 0.85em; color: #34c759;">
+                                    +{{ "{:,}".format(item.stars_today) }} ⭐ today
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if item.description %}
+                        <div class="item-description">{{ item.description }}</div>
+                        {% endif %}
+                        {% if item.topics %}
+                        <div class="topic-tags">
+                            {% for topic in item.topics[:5] %}
+                            <span class="topic-tag">{{ topic }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        <div class="item-meta">
+                            {% if item.language %}
+                            <span class="language-tag">{{ item.language }}</span>
+                            {% endif %}
+                            {% if item.forks %}
+                            <span class="meta-item">
+                                {{ "{:,}".format(item.forks) }} forks
+                            </span>
+                            {% endif %}
+                            {% if item.built_by %}
+                            <span class="meta-item">
+                                {{ item.built_by }} contributors
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            
+            {% if grouped_items.github_explore %}
+            <section class="section">
+                <div class="section-header">
+                    <span class="section-icon">📦</span>
+                    <h2 class="section-title">GitHub Collections</h2>
+                    <span class="section-count">{{ grouped_items.github_explore|length }}</span>
+                </div>
+                <div class="items">
+                    {% for item in grouped_items.github_explore %}
+                    <div class="item">
+                        <div class="item-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                            <div style="flex: 1;">
+                                <div class="item-title">
+                                    <a href="{{ item.url }}" target="_blank">{{ item.name }}</a>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="context-badge">📦 Curated</span>
+                            </div>
+                        </div>
+                        {% if item.description %}
+                        <div class="item-description">{{ item.description }}</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            
+            {% if grouped_items.huggingface_papers %}
+            <section class="section" id="hf-papers">
+                <div class="section-header">
+                    <span class="section-icon">📄</span>
+                    <h2 class="section-title">Hugging Face Papers</h2>
+                    <span class="section-count">{{ grouped_items.huggingface_papers|length }}</span>
+                </div>
+                <div class="items">
+                    {% for item in grouped_items.huggingface_papers %}
+                    <div class="item">
+                        <div class="item-header">
+                            <div style="flex: 1;">
+                                <div class="item-title">
+                                    <a href="{{ item.url }}" target="_blank">{{ item.name }}</a>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                {% if item.upvotes %}
+                                <div style="font-size: 1.2em; font-weight: bold; color: #667eea;">
+                                    👍 {{ item.upvotes }}
+                                </div>
+                                {% endif %}
+                                {% if item.published_date %}
+                                <div style="font-size: 0.85em; color: #666;">
+                                    {{ item.published_date }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if item.arxiv_id %}
+                        <span class="arxiv-badge">arXiv:{{ item.arxiv_id }}</span>
+                        {% endif %}
+                        {% if item.description %}
+                        <div class="item-description">{{ item.description }}</div>
+                        {% endif %}
+                        <div class="item-meta">
+                            <span class="context-badge">📄 Research Paper</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            
+            {% if grouped_items.huggingface_spaces %}
+            <section class="section" id="hf-spaces">
+                <div class="section-header">
+                    <span class="section-icon">🚀</span>
+                    <h2 class="section-title">Hugging Face Spaces</h2>
+                    <span class="section-count">{{ grouped_items.huggingface_spaces|length }}</span>
+                </div>
+                <div class="items">
+                    {% for item in grouped_items.huggingface_spaces %}
+                    <div class="item">
+                        <div class="item-header" style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
+                            <div style="flex: 1;">
+                                <div class="item-title">
+                                    <a href="{{ item.url }}" target="_blank">{{ item.name }}</a>
+                                </div>
+                            </div>
+                            <div style="text-align: right; margin-left: 16px;">
+                                {% if item.likes %}
+                                <div style="font-size: 1.2em; font-weight: bold; color: #667eea;">
+                                    ❤️ {{ "{:,}".format(item.likes) }}
+                                </div>
+                                {% endif %}
+                                {% if item.created_at %}
+                                <div style="font-size: 0.85em; color: #666;">
+                                    {{ item.created_at }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if item.description %}
+                        <div class="item-description">{{ item.description }}</div>
+                        {% endif %}
+                        <div class="item-meta">
+                            <span class="context-badge">🚀 Interactive Demo</span>
+                            {% if item.sdk %}
+                            <span class="language-tag">{{ item.sdk }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+            
+            {% if stats.total_items == 0 %}
+            <div class="empty-state">
+                <h2>No items found for this time range</h2>
+                <p>Try a different date range or check back later.</p>
+            </div>
+            {% endif %}
+        </div>
+        
+        <footer>
+            <p>Generated by <strong>Gen AI News Aggregator</strong></p>
+            <p>Data from <a href="https://github.com/trending">GitHub</a> • <a href="https://huggingface.co">Hugging Face</a></p>
+            <p style="margin-top: 10px; font-size: 0.9em;">{{ generated_at }}</p>
+            
+            <div class="creator-info">
+                <h3>✨ Built by</h3>
+                <p>
+                    <strong>Yuval Avidani</strong><br>
+                    AI Builder & Speaker
+                </p>
+                <a href="https://yuv.ai" target="_blank" class="creator-link">🌐 YUV.AI</a>
+            </div>
+        </footer>
+    </div>
+</body>
+</html>
