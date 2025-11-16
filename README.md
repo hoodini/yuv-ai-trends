@@ -1,11 +1,100 @@
 # 🤖 YUV.AI Developers AI Trends
 
-> **Stay ahead of the curve with curated Gen AI & Machine Learning trends, delivered in a beautiful digest.**
+> **Stay ahead of the curve with curated Gen AI & Machine Learning trends, delivered in a beautiful digest with AI-powered summaries.**
 
-A personalized news aggregator that fetches, ranks, and presents the latest trending content from the AI/ML ecosystem in a stunning, Apple Newsroom-inspired layout.
+A personalized news aggregator that fetches, ranks, and presents the latest trending content from the AI/ML ecosystem in a stunning, Apple Newsroom-inspired layout. Now featuring AI-generated summaries and trending explanations powered by Cohere or Anthropic Claude.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![AI-Powered](https://img.shields.io/badge/AI-Powered-purple.svg)
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TB
+    subgraph "User Interface"
+        CLI[CLI main.py]
+        HTML[Generated HTML Digest]
+    end
+    
+    subgraph "Core Processing"
+        CLI --> Fetchers[Fetchers Module]
+        Fetchers --> Ranker[Ranker Module]
+        Ranker --> Generator[Generator Module]
+        Generator --> Summarizer[AI Summarizer]
+        Summarizer --> Generator
+        Generator --> HTML
+    end
+    
+    subgraph "Data Sources"
+        GitHub[GitHub Trending API]
+        GitHubExplore[GitHub Explore]
+        HFPapers[Hugging Face Papers]
+        HFSpaces[Hugging Face Spaces API]
+        
+        Fetchers -->|Web Scraping| GitHub
+        Fetchers -->|Web Scraping| GitHubExplore
+        Fetchers -->|Web Scraping| HFPapers
+        Fetchers -->|API Call| HFSpaces
+    end
+    
+    subgraph "AI Services"
+        Cohere[Cohere API<br/>command-a-03-2025]
+        Anthropic[Anthropic Claude<br/>claude-sonnet-4]
+        
+        Summarizer -->|Generate Summaries| Cohere
+        Summarizer -->|Generate Summaries| Anthropic
+    end
+    
+    subgraph "Data Flow"
+        GitHub -->|Stars, Velocity,<br/>Topics, Forks| Fetchers
+        GitHubExplore -->|Collections| Fetchers
+        HFPapers -->|Papers, Authors,<br/>Upvotes, arXiv IDs| Fetchers
+        HFSpaces -->|Spaces, Likes,<br/>SDKs| Fetchers
+        
+        Fetchers -->|Raw Items| Ranker
+        Ranker -->|Scored & Ranked<br/>Top N Items| Generator
+        Generator -->|Items + Context| Summarizer
+        Summarizer -->|AI Summary<br/>Trending Reason| Generator
+        Generator -->|Jinja2 Template| HTML
+    end
+    
+    subgraph "Configuration"
+        Config[config.py]
+        Config -.->|Settings| Fetchers
+        Config -.->|Weights| Ranker
+        Config -.->|API Keys| Summarizer
+    end
+    
+    style CLI fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    style HTML fill:#34c759,stroke:#333,stroke-width:2px,color:#fff
+    style Cohere fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
+    style Anthropic fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
+    style Summarizer fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+```
+
+### Data Flow Steps
+
+1. **CLI Invocation** → User runs `python main.py` with options
+2. **Fetchers** → Parallel collection from multiple sources:
+   - GitHub Trending (web scraping)
+   - Hugging Face Papers (web scraping)
+   - Hugging Face Spaces (official API)
+   - GitHub Explore Collections (web scraping)
+3. **Ranker** → Scores items based on:
+   - Popularity metrics (40%)
+   - Growth velocity (30%)
+   - Recency (30%)
+4. **Generator** → Takes top N ranked items
+5. **AI Summarizer** → For each item:
+   - Builds context from metadata
+   - Calls Cohere or Anthropic API
+   - Generates concise summary
+   - Explains trending reasons
+6. **Template Rendering** → Jinja2 renders HTML with enriched data
+7. **Output** → Beautiful HTML digest with AI summaries & copy buttons
 
 ---
 
@@ -29,11 +118,19 @@ A personalized news aggregator that fetches, ranks, and presents the latest tren
 - Real-time trending indicators
 - Topic categorization and tags
 
+### 🤖 **AI-Powered Insights** ✨ NEW!
+- Automatic one-sentence summaries for each item
+- AI-generated trending explanations
+- Powered by Cohere or Anthropic Claude
+- Grounded in real metrics and descriptions
+- One-click copy to clipboard
+
 ### ⚙️ **Flexible & Customizable**
 - Multiple time ranges: daily, weekly, monthly, or custom
 - Configurable sources and filters
 - Language-specific trending (Python, TypeScript, Jupyter, etc.)
 - Easy branding customization
+- Optional AI summaries (can be disabled)
 
 ### 🤖 **Automation Ready**
 - CLI interface for easy scripting
@@ -48,12 +145,13 @@ A personalized news aggregator that fetches, ranks, and presents the latest tren
 ### Prerequisites
 - Python 3.8 or higher
 - pip package manager
+- (Optional) Cohere or Anthropic API key for AI summaries
 
 ### Installation
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/yourusername/yuv-ai-trends.git
+git clone https://github.com/hoodini/yuv-ai-trends.git
 cd yuv-ai-trends
 ```
 
@@ -62,9 +160,26 @@ cd yuv-ai-trends
 pip install -r requirements.txt
 ```
 
-3. **Generate your first digest**
+3. **(Optional) Set up AI API key**
 ```bash
+# For Cohere (recommended - faster)
+export COHERE_API_KEY="your-api-key-here"
+
+# OR for Anthropic Claude
+export ANTHROPIC_API_KEY="your-api-key-here"
+
+# Get your free API key:
+# Cohere: https://dashboard.cohere.com/api-keys
+# Anthropic: https://console.anthropic.com/
+```
+
+4. **Generate your first digest**
+```bash
+# With AI summaries (if API key is set)
 python main.py --range daily --open
+
+# Without AI summaries
+python main.py --range daily --open --no-ai
 ```
 
 That's it! Your browser will open with today's AI trends digest. 🎉
@@ -107,6 +222,7 @@ python main.py --range daily --output my_digest.html
 | `--limit` | Max items in digest | `--limit 50` |
 | `--open` | Open in browser after generation | `--open` |
 | `--output` | Custom output filename | `--output weekly.html` |
+| `--no-ai` | Disable AI-powered summaries | `--no-ai` |
 
 ---
 
@@ -128,7 +244,25 @@ SCORING_WEIGHTS = {
     "recency_weight": 0.3,    # How recent matters
     "velocity_weight": 0.3,   # Growth rate importance
 }
+
+# AI Summarization settings
+AI_SUMMARIES_ENABLED = True  # Set to False to disable globally
+AI_MAX_WORKERS = 3  # Parallel API calls (lower for rate limits)
 ```
+
+### API Key Setup
+
+Create a `.env` file or set environment variables:
+
+```bash
+# Option 1: Cohere (recommended - faster, generous free tier)
+COHERE_API_KEY=your_cohere_key_here
+
+# Option 2: Anthropic Claude (more detailed summaries)
+ANTHROPIC_API_KEY=your_anthropic_key_here
+```
+
+The system will auto-detect which API key is available and use it.
 
 ---
 
@@ -182,16 +316,18 @@ See `AUTOMATION.md` for more detailed automation options.
 
 ```
 yuv-ai-trends/
-├── main.py              # CLI entry point
+├── main.py              # CLI entry point & orchestration
 ├── config.py            # Configuration settings
 ├── fetchers.py          # Data collection from sources
 ├── ranker.py            # Scoring & ranking algorithms
 ├── generator.py         # HTML digest generation
+├── summarizer.py        # 🆕 AI-powered summaries (Cohere/Anthropic)
 ├── hf_mcp.py           # Hugging Face MCP integration
 ├── templates/
-│   └── digest.html      # Beautiful HTML template
+│   └── digest.html      # Beautiful HTML template w/ AI sections
 ├── output/              # Generated digests
 ├── requirements.txt     # Python dependencies
+├── .env.example        # API key template
 ├── README.md           # You are here!
 └── AUTOMATION.md       # Automation guides
 ```
@@ -250,6 +386,9 @@ Scores are normalized to 0-100 and items are sorted accordingly.
 - **Hugging Face Hub**: Official API client
 - **Jinja2**: HTML templating
 - **Click**: CLI interface
+- **Cohere SDK**: AI summary generation (primary)
+- **Anthropic SDK**: Alternative AI provider
+- **Concurrent Futures**: Parallel API calls
 
 ---
 
@@ -312,19 +451,31 @@ The digest includes:
 - **GitHub Repos**: With stars, velocity, topics, forks, contributors
 - **Papers**: With authors, arXiv IDs, upvotes, publication dates
 - **Spaces**: With likes, SDKs, creation dates
+- **✨ AI Summaries**: One-sentence description of what each item does
+- **🔥 Trending Explanations**: Why it's trending and what's innovative
+- **📋 Copy Buttons**: One-click copy summary to clipboard
 
 All organized in a beautiful, clickable layout with smooth scrolling and responsive design.
+
+### AI Summary Example
+
+**Project**: UniVA: Universal Video Agent  
+**✨ AI Summary**: UniVA is an open-source, generalist AI agent designed to perform diverse video-related tasks universally.  
+**🔥 Why Trending**: UniVA is trending due to its groundbreaking ability to handle a wide range of video tasks—from editing and summarization to generation—with a single model, democratizing advanced video AI through open-source accessibility.
 
 ---
 
 ## 🔮 Roadmap
 
+- [x] AI-powered summaries (✅ Completed!)
+- [x] Multiple AI provider support (✅ Cohere + Anthropic)
+- [x] Copy to clipboard functionality (✅ Completed!)
 - [ ] Add more data sources (Papers with Code, Reddit, Twitter)
 - [ ] Email digest delivery
 - [ ] RSS feed generation
 - [ ] User accounts and preferences
 - [ ] Mobile app
-- [ ] AI-powered summaries
+- [ ] Sentiment analysis and topic clustering
 
 ---
 
