@@ -4,6 +4,19 @@
 
 A personalized news aggregator that fetches, ranks, and presents the latest trending content from the AI/ML ecosystem in a stunning, Apple Newsroom-inspired layout. Now featuring AI-generated summaries and trending explanations powered by Cohere or Anthropic Claude.
 
+## 📸 Screenshots
+
+### Main Interface with Top 5 Highlights
+![App with Data](screenshots/app_with_data.png)
+
+### Content Filtering Tabs
+![Tabs Section](screenshots/app_tabs_section.png)
+
+### Filtered View (Code Repos)
+![Filtered Repos](screenshots/app_filtered_repos.png)
+
+---
+
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
 ![AI-Powered](https://img.shields.io/badge/AI-Powered-purple.svg)
