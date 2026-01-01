@@ -1,9 +1,13 @@
-import React from 'react';
-import { Cpu, Activity, Wifi } from 'lucide-react';
+import React, { useState } from 'react';
+import { Cpu, Activity, Wifi, Settings } from 'lucide-react';
 import { motion } from 'framer-motion';
+import SettingsModal from './Settings';
 
 const Header = () => {
+    const [settingsOpen, setSettingsOpen] = useState(false);
+
     return (
+        <>
         <motion.header
             initial={{ y: -100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -50,9 +54,24 @@ const Header = () => {
                     <div className="px-3 py-1 rounded border border-white/10 bg-white/5 text-[10px] font-mono text-white/50">
                         v2.5.0-CYBER
                     </div>
+
+                    <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+
+                    <motion.button
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setSettingsOpen(true)}
+                        className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-colors group"
+                        title="Settings"
+                    >
+                        <Settings className="w-5 h-5 text-muted-foreground group-hover:text-white group-hover:rotate-90 transition-all duration-300" />
+                    </motion.button>
                 </div>
             </div>
         </motion.header>
+
+        <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        </>
     );
 };
 

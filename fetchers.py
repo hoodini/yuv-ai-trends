@@ -44,7 +44,7 @@ class GitHubTrendingFetcher:
             return repos
             
         except Exception as e:
-            print(f"Error fetching GitHub trending: {e}")
+            # print(f"Error fetching GitHub trending: {e}")
             return []
     
     def _parse_repo(self, article, since: str) -> Optional[Dict]:
@@ -128,7 +128,7 @@ class GitHubTrendingFetcher:
             }
             
         except Exception as e:
-            print(f"Error parsing repo: {e}")
+            # print(f"Error parsing repo: {e}")
             return None
     
     def fetch_all_languages(self, since: str = "daily") -> List[Dict]:
@@ -178,7 +178,7 @@ class GitHubExploreFetcher:
             return collections[:10]  # Limit to top 10
             
         except Exception as e:
-            print(f"Error fetching GitHub Explore: {e}")
+            # print(f"Error fetching GitHub Explore: {e}")
             return []
     
     def _parse_collection(self, article) -> Optional[Dict]:
@@ -209,7 +209,7 @@ class GitHubExploreFetcher:
             }
             
         except Exception as e:
-            print(f"Error parsing collection: {e}")
+            # print(f"Error parsing collection: {e}")
             return None
 
 
@@ -237,7 +237,7 @@ class HuggingFaceFetcher:
             return papers
             
         except Exception as e:
-            print(f"Error fetching HF papers: {e}")
+            # print(f"Error fetching HF papers: {e}")
             return []
     
     def _parse_paper(self, article) -> Optional[Dict]:
@@ -301,7 +301,7 @@ class HuggingFaceFetcher:
             }
             
         except Exception as e:
-            print(f"Error parsing paper: {e}")
+            # print(f"Error parsing paper: {e}")
             return None
     
     def fetch_trending_spaces(self, limit: int = 20) -> List[Dict]:
@@ -341,7 +341,7 @@ class HuggingFaceFetcher:
             return spaces
             
         except Exception as e:
-            print(f"Error fetching HF spaces via API: {e}")
+            # print(f"Error fetching HF spaces via API: {e}")
             # Fallback to empty list
             return []
     
@@ -400,5 +400,5 @@ class HuggingFaceFetcher:
             }
             
         except Exception as e:
-            print(f"Error parsing space: {e}")
+            # print(f"Error parsing space: {e}")
             return None

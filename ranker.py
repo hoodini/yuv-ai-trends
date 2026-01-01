@@ -119,15 +119,15 @@ class ContentRanker:
     def _get_score_label(self, score: float) -> str:
         """Convert score to human-readable label"""
         if score >= 80:
-            return "🔥 Viral"
+            return "Viral"
         elif score >= 65:
-            return "⚡ Hot"
+            return "Hot"
         elif score >= 50:
-            return "⭐ Rising"
+            return "Rising"
         elif score >= 35:
-            return "📈 Growing"
+            return "Growing"
         else:
-            return "🌱 New"
+            return "New"
     
     def filter_by_date_range(self, items: List[Dict], days: int) -> List[Dict]:
         """

@@ -1,0 +1,10 @@
+
+
+=== Error at 2026-01-01 10:14:55.948748 ===
+Error: 'Config' object has no attribute 'TIME_RANGES'
+Traceback: Traceback (most recent call last):
+  File "C:\Users\User\Documents\projects\news\api.py", line 47, in generate_news
+    if request.time_range not in config.TIME_RANGES:
+                                 ^^^^^^^^^^^^^^^^^^
+AttributeError: 'Config' object has no attribute 'TIME_RANGES'
+

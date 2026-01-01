@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python main.py:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -File:*)",
+      "Bash(.venvScriptspython.exe api.py)",
+      "Bash(.venvScriptspython.exe main.py --limit 5 --no-ai)",
+      "Bash($env:PYTHONIOENCODING='utf-8')",
+      "Bash($env:PYTHONUTF8='1')",
+      "Bash(taskkill:*)",
+      "Bash(Start-Sleep -Seconds 5)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

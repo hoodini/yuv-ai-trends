@@ -21,16 +21,21 @@ class AIContentSummarizer:
         self.provider = provider
         self.api_key = api_key
         self.client = None
-        
+
         if not self.provider:
-            # Check which API key is available
-            if os.environ.get("COHERE_API_KEY") or (api_key and not os.environ.get("ANTHROPIC_API_KEY")):
+            # Check which API key is available, prefer setting from LLM_PROVIDER env var
+            provider_pref = os.environ.get("LLM_PROVIDER", "").lower()
+            if provider_pref in ["anthropic", "cohere", "groq"]:
+                self.provider = provider_pref
+            elif os.environ.get("COHERE_API_KEY"):
                 self.provider = "cohere"
             elif os.environ.get("ANTHROPIC_API_KEY"):
                 self.provider = "anthropic"
+            elif os.environ.get("GROQ_API_KEY"):
+                self.provider = "groq"
             else:
-                raise ValueError("No API key found. Please set ANTHROPIC_API_KEY or COHERE_API_KEY in environment variables.")
-        
+                raise ValueError("No API key found. Please set ANTHROPIC_API_KEY, COHERE_API_KEY, or GROQ_API_KEY in environment variables.")
+
         # Initialize the appropriate client
         if self.provider == "cohere":
             import cohere
@@ -46,8 +51,15 @@ class AIContentSummarizer:
                 raise ValueError("ANTHROPIC_API_KEY not found. Please set it in environment variables.")
             self.client = anthropic.Anthropic(api_key=self.api_key)
             print(f"Using Anthropic Claude API for AI summaries")
+        elif self.provider == "groq":
+            from groq import Groq
+            self.api_key = self.api_key or os.environ.get("GROQ_API_KEY")
+            if not self.api_key:
+                raise ValueError("GROQ_API_KEY not found. Please set it in environment variables.")
+            self.client = Groq(api_key=self.api_key)
+            print(f"Using Groq API for AI summaries")
         else:
-            raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic' or 'cohere'.")
+            raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic', 'cohere', or 'groq'.")
     
     def generate_summary_and_explanation(self, item: Dict) -> Dict:
         """
@@ -115,24 +127,44 @@ SOLVES: [problem/use case]
 HOW: [approach/methodology]"""
 
         try:
+            # Get model from environment or use default
+            model = os.environ.get("LLM_MODEL", "")
+
             if self.provider == "cohere":
                 # Use Cohere API
+                if not model:
+                    model = "command-a-03-2025"
                 response = self.client.chat(
-                    model="command-a-03-2025",
+                    model=model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=300
                 )
                 response_text = response.message.content[0].text
-            else:
+            elif self.provider == "anthropic":
                 # Use Anthropic API
+                if not model:
+                    model = "claude-sonnet-4-20250514"
                 message = self.client.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=model,
                     max_tokens=300,
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
                 )
                 response_text = message.content[0].text
+            elif self.provider == "groq":
+                # Use Groq API
+                if not model:
+                    model = "llama-3.3-70b-versatile"
+                completion = self.client.chat.completions.create(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=300,
+                    temperature=0.7
+                )
+                response_text = completion.choices[0].message.content
+            else:
+                raise ValueError(f"Unknown provider: {self.provider}")
             
             # Parse response
             what = ""

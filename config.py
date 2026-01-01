@@ -29,4 +29,4 @@ TEMPLATE_DIR = "templates"
 
 # AI Summarization settings
 AI_SUMMARIES_ENABLED = True  # Set to False to disable AI summaries
-AI_MAX_WORKERS = 5  # Number of parallel API calls for summarization
+AI_MAX_WORKERS = 3  # Number of parallel API calls for summarization (reduced for rate limiting)

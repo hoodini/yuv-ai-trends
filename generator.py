@@ -28,7 +28,7 @@ class DigestGenerator:
                 from summarizer import AIContentSummarizer
                 self.summarizer = AIContentSummarizer()
             except Exception as e:
-                print(f"⚠️  AI summarizer not available: {e}")
+                print(f"WARNING: AI summarizer not available: {e}")
                 self.use_ai_summaries = False
     
     def generate(
@@ -52,19 +52,7 @@ class DigestGenerator:
         """
         # Enrich items with AI summaries if enabled
         if self.use_ai_summaries and self.summarizer:
-            print("🤖 Generating AI summaries and explanations...")
-            all_items_flat = []
-            for source_items in grouped_items.values():
-                all_items_flat.extend(source_items)
-            
-            enriched = self.summarizer.enrich_items_batch(all_items_flat, max_workers=5)
-            
-            # Update grouped_items with enriched data
-            enriched_map = {item['url']: item for item in enriched}
-            for source, source_items in grouped_items.items():
-                for item in source_items:
-                    if item['url'] in enriched_map:
-                        item.update(enriched_map[item['url']])
+            self.enrich_data(grouped_items)
         
         # Calculate statistics
         stats = self._calculate_stats(grouped_items)
@@ -94,6 +82,25 @@ class DigestGenerator:
             f.write(html_content)
         
         return output_path
+
+    def enrich_data(self, grouped_items: Dict[str, List[Dict]]) -> None:
+        """Enrich items with AI summaries in-place"""
+        if not self.use_ai_summaries or not self.summarizer:
+            return
+
+        print("Generating AI summaries and explanations...")
+        all_items_flat = []
+        for source_items in grouped_items.values():
+            all_items_flat.extend(source_items)
+        
+        enriched = self.summarizer.enrich_items_batch(all_items_flat, max_workers=5)
+        
+        # Update grouped_items with enriched data
+        enriched_map = {item['url']: item for item in enriched}
+        for source, source_items in grouped_items.items():
+            for item in source_items:
+                if item['url'] in enriched_map:
+                    item.update(enriched_map[item['url']])
     
     def _calculate_stats(self, grouped_items: Dict[str, List[Dict]]) -> Dict:
         """Calculate statistics from grouped items"""
