@@ -1,0 +1,59 @@
+import React from 'react';
+import { Cpu, Activity, Wifi } from 'lucide-react';
+import { motion } from 'framer-motion';
+
+const Header = () => {
+    return (
+        <motion.header
+            initial={{ y: -100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="w-full py-4 px-6 fixed top-0 z-50 bg-background/80 backdrop-blur-md border-b border-white/5"
+        >
+            <div className="max-w-7xl mx-auto flex justify-between items-center">
+                {/* Logo Section */}
+                <div className="flex items-center gap-4">
+                    <motion.div
+                        whileHover={{ rotate: 180, scale: 1.1 }}
+                        transition={{ duration: 0.5 }}
+                        className="p-2 bg-primary/10 rounded-lg border border-primary/50 shadow-neon-blue"
+                    >
+                        <Cpu className="w-6 h-6 text-primary" />
+                    </motion.div>
+
+                    <div className="flex flex-col">
+                        <h1 className="text-2xl font-display font-bold tracking-wider text-white">
+                            <span className="text-primary text-glow">YUV</span>.AI
+                        </h1>
+                        <div className="flex items-center gap-2 text-[10px] font-mono text-primary/60 tracking-[0.2em] uppercase">
+                            <span>Neural Nexus</span>
+                            <span className="w-1 h-1 bg-primary rounded-full animate-pulse"></span>
+                            <span>Online</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* HUD Elements */}
+                <div className="hidden md:flex items-center gap-8">
+                    <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
+                        <Activity className="w-4 h-4 text-secondary animate-pulse" />
+                        <span>SYSTEM STATUS: OPTIMAL</span>
+                    </div>
+
+                    <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+
+                    <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
+                        <Wifi className="w-4 h-4 text-neon-green" />
+                        <span>NETLINK: SECURE</span>
+                    </div>
+
+                    <div className="px-3 py-1 rounded border border-white/10 bg-white/5 text-[10px] font-mono text-white/50">
+                        v2.5.0-CYBER
+                    </div>
+                </div>
+            </div>
+        </motion.header>
+    );
+};
+
+export default Header;

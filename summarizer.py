@@ -38,14 +38,14 @@ class AIContentSummarizer:
             if not self.api_key:
                 raise ValueError("COHERE_API_KEY not found. Please set it in environment variables.")
             self.client = cohere.ClientV2(api_key=self.api_key)
-            print(f"✨ Using Cohere API for AI summaries")
+            print(f"Using Cohere API for AI summaries")
         elif self.provider == "anthropic":
             import anthropic
             self.api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
             if not self.api_key:
                 raise ValueError("ANTHROPIC_API_KEY not found. Please set it in environment variables.")
             self.client = anthropic.Anthropic(api_key=self.api_key)
-            print(f"✨ Using Anthropic Claude API for AI summaries")
+            print(f"Using Anthropic Claude API for AI summaries")
         else:
             raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic' or 'cohere'.")
     
@@ -93,20 +93,26 @@ class AIContentSummarizer:
         
         context = '\n'.join(context_info)
         
-        prompt = f"""You are analyzing trending AI/ML content. Based ONLY on the provided information below, generate:
-
-1. A single concise sentence (max 15 words) summarizing what this project/paper/space does - base this ONLY on the actual description and context provided
-2. A brief explanation (2-3 sentences) of why it's trending based on the metrics (stars, upvotes, likes) and what the description indicates is new or innovative - DO NOT make up features or capabilities not mentioned in the description
+        prompt = f"""You are analyzing trending AI/ML content. Based ONLY on the provided information below, generate a practical, structured analysis:
 
 Project: {name}
 Description: {description}
 Context: {context}
 
-IMPORTANT: Only describe what is explicitly stated in the description and context. Do not invent or assume features, capabilities, or purposes not mentioned above.
+Generate three sections:
 
-Format your response as:
-SUMMARY: [one sentence based only on provided description]
-TRENDING: [2-3 sentences explaining why based only on the metrics and description provided]"""
+1. WHAT: A clear, concise description (1-2 sentences) of what this project/paper/space actually is - its core technology, framework, or research focus. Be specific and technical.
+
+2. SOLVES: Explain (1-2 sentences) what problem this solves, what use case it addresses, or what gap it fills in the AI/ML ecosystem. Focus on practical applications.
+
+3. HOW: Briefly describe (1-2 sentences) the key technical approach, methodology, or innovative aspect that makes it work or stand out. Include technical details if mentioned in the description.
+
+IMPORTANT: Only describe what is explicitly stated in the description and context. Do not invent or assume features, capabilities, or purposes not mentioned above. If a section cannot be answered from the provided information, state "Details not provided in source material."
+
+Format your response exactly as:
+WHAT: [description]
+SOLVES: [problem/use case]
+HOW: [approach/methodology]"""
 
         try:
             if self.provider == "cohere":
@@ -114,14 +120,14 @@ TRENDING: [2-3 sentences explaining why based only on the metrics and descriptio
                 response = self.client.chat(
                     model="command-a-03-2025",
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=200
+                    max_tokens=300
                 )
                 response_text = response.message.content[0].text
             else:
                 # Use Anthropic API
                 message = self.client.messages.create(
                     model="claude-sonnet-4-20250514",
-                    max_tokens=200,
+                    max_tokens=300,
                     messages=[
                         {"role": "user", "content": prompt}
                     ]
@@ -129,35 +135,51 @@ TRENDING: [2-3 sentences explaining why based only on the metrics and descriptio
                 response_text = message.content[0].text
             
             # Parse response
-            summary = ""
-            trending_reason = ""
-            
+            what = ""
+            solves = ""
+            how = ""
+
             lines = response_text.strip().split('\n')
             current_section = None
-            
+
             for line in lines:
                 line = line.strip()
-                if line.startswith('SUMMARY:'):
-                    current_section = 'summary'
-                    summary = line.replace('SUMMARY:', '').strip()
-                elif line.startswith('TRENDING:'):
-                    current_section = 'trending'
-                    trending_reason = line.replace('TRENDING:', '').strip()
-                elif current_section == 'summary' and line:
-                    summary += ' ' + line
-                elif current_section == 'trending' and line:
-                    trending_reason += ' ' + line
-            
+                if line.startswith('WHAT:'):
+                    current_section = 'what'
+                    what = line.replace('WHAT:', '').strip()
+                elif line.startswith('SOLVES:'):
+                    current_section = 'solves'
+                    solves = line.replace('SOLVES:', '').strip()
+                elif line.startswith('HOW:'):
+                    current_section = 'how'
+                    how = line.replace('HOW:', '').strip()
+                elif current_section == 'what' and line and not line.startswith('SOLVES:') and not line.startswith('HOW:'):
+                    what += ' ' + line
+                elif current_section == 'solves' and line and not line.startswith('HOW:'):
+                    solves += ' ' + line
+                elif current_section == 'how' and line:
+                    how += ' ' + line
+
+            # Combine into structured summary
+            structured_summary = f"**What:** {what.strip()}\n\n**Solves:** {solves.strip()}\n\n**How:** {how.strip()}"
+
             return {
-                'summary': summary.strip(),
-                'trending_reason': trending_reason.strip()
+                'summary': structured_summary,
+                'trending_reason': f"{what.strip()} {solves.strip()}",  # Backward compatibility
+                'what': what.strip(),
+                'solves': solves.strip(),
+                'how': how.strip()
             }
         
         except Exception as e:
             print(f"Error generating summary for {name}: {e}")
+            fallback_what = description[:100] + '...' if len(description) > 100 else description
             return {
-                'summary': description[:100] + '...' if len(description) > 100 else description,
-                'trending_reason': 'Trending in the AI/ML community.'
+                'summary': f"**What:** {fallback_what}\n\n**Solves:** Details not available.\n\n**How:** Details not available.",
+                'trending_reason': 'Trending in the AI/ML community.',
+                'what': fallback_what,
+                'solves': 'Details not available.',
+                'how': 'Details not available.'
             }
     
     def enrich_items_batch(self, items: List[Dict], max_workers: int = 3) -> List[Dict]:
