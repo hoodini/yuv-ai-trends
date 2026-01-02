@@ -11,6 +11,7 @@ function App() {
     const [timeRange, setTimeRange] = useState('daily');
     const [items, setItems] = useState([]);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isPopulating, setIsPopulating] = useState(false);
     const [error, setError] = useState(null);
     const [hasGenerated, setHasGenerated] = useState(false);
 
@@ -33,6 +34,41 @@ function App() {
             setError("Failed to connect to the neural network. Please ensure the backend server is running.");
         } finally {
             setIsGenerating(false);
+        }
+    };
+
+    const handlePopulateSummaries = async () => {
+        if (items.length === 0) {
+            setError("No items to populate. Please generate content first.");
+            return;
+        }
+
+        setIsPopulating(true);
+        setError(null);
+
+        try {
+            const response = await axios.post('http://localhost:8000/api/populate-summaries', {
+                items: items,
+                force_refresh: false
+            });
+
+            if (response.data.success) {
+                // Re-fetch to get updated items with summaries
+                const refreshResponse = await axios.post('http://localhost:8000/api/generate', {
+                    time_range: timeRange,
+                    limit: 50,
+                    disable_ai: false
+                });
+                setItems(refreshResponse.data.items);
+                
+                // Show success message
+                console.log(`Populated ${response.data.newly_populated} new summaries`);
+            }
+        } catch (err) {
+            console.error("Error populating summaries:", err);
+            setError("Failed to populate AI summaries. " + (err.response?.data?.detail || err.message));
+        } finally {
+            setIsPopulating(false);
         }
     };
 

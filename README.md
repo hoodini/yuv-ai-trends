@@ -1,21 +1,8 @@
 # 🤖 YUV.AI Developers AI Trends
 
-> **Stay ahead of the curve with curated Gen AI & Machine Learning trends, delivered in a beautiful digest with AI-powered summaries.**
+> **Your personal AI news assistant - get the latest AI/ML trends with smart summaries, no API key required!**
 
-A personalized news aggregator that fetches, ranks, and presents the latest trending content from the AI/ML ecosystem in a stunning, Apple Newsroom-inspired layout. Now featuring AI-generated summaries and trending explanations powered by Cohere or Anthropic Claude.
-
-## 📸 Screenshots
-
-### Main Interface with Top 5 Highlights
-![App with Data](screenshots/app_with_data.png)
-
-### Content Filtering Tabs
-![Tabs Section](screenshots/app_tabs_section.png)
-
-### Filtered View (Code Repos)
-![Filtered Repos](screenshots/app_filtered_repos.png)
-
----
+A news aggregator that fetches trending AI content from GitHub and Hugging Face, then explains what each project does using AI. Works out-of-the-box with a built-in local summarizer, or connect your favorite AI provider for enhanced summaries.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
@@ -23,472 +10,416 @@ A personalized news aggregator that fetches, ranks, and presents the latest tren
 
 ---
 
-## 🏗️ System Architecture
+## 📋 Release Notes (v2.0.0)
+
+### 🆕 What's New
+
+- **No API Key Required!** - New `local_wasm` mode generates summaries without any external API
+- **Smart Caching** - Summaries are cached locally, auto-cleans invalid entries
+- **4 AI Providers** - Choose from Local, Groq (free), Cohere, or Anthropic Claude
+- **Better Fallbacks** - Automatically falls back to local mode if API fails or rate-limits
+- **Improved Metadata** - Better summaries for items without descriptions (HuggingFace Spaces)
+- **New API Endpoints** - `/api/populate-summaries`, `/api/cache-stats`, `/api/check-summaries`
+
+### 🐛 Bug Fixes
+
+- Fixed empty "What" fields in AI summaries
+- Fixed cache returning invalid entries
+- Improved error handling for rate limits
+
+---
+
+## 📸 Screenshots
+
+### Main Interface
+![App with Data](screenshots/app_with_data.png)
+
+### Content Filtering
+![Tabs Section](screenshots/app_tabs_section.png)
+
+---
+
+## 🏗️ Architecture
 
 ```mermaid
-graph TB
-    subgraph "User Interface"
-        CLI[CLI main.py]
-        HTML[Generated HTML Digest]
+flowchart TB
+    subgraph Frontend["🖥️ Frontend (React + Vite)"]
+        UI[Web UI<br/>localhost:5173]
+        App[App.jsx]
+        Components[Components<br/>NewsCard, NewsFeed, etc.]
     end
-    
-    subgraph "Core Processing"
-        CLI --> Fetchers[Fetchers Module]
-        Fetchers --> Ranker[Ranker Module]
-        Ranker --> Generator[Generator Module]
-        Generator --> Summarizer[AI Summarizer]
-        Summarizer --> Generator
-        Generator --> HTML
-    end
-    
-    subgraph "Data Sources"
-        GitHub[GitHub Trending API]
-        GitHubExplore[GitHub Explore]
-        HFPapers[Hugging Face Papers]
-        HFSpaces[Hugging Face Spaces API]
+
+    subgraph Backend["⚙️ Backend (FastAPI)"]
+        API[api.py<br/>localhost:8000]
         
-        Fetchers -->|Web Scraping| GitHub
-        Fetchers -->|Web Scraping| GitHubExplore
-        Fetchers -->|Web Scraping| HFPapers
-        Fetchers -->|API Call| HFSpaces
-    end
-    
-    subgraph "AI Services"
-        Cohere[Cohere API<br/>command-a-03-2025]
-        Anthropic[Anthropic Claude<br/>claude-sonnet-4]
+        subgraph Fetchers["📡 Data Fetchers"]
+            GH[GitHub Trending]
+            HFP[HuggingFace Papers]
+            HFS[HuggingFace Spaces]
+        end
         
-        Summarizer -->|Generate Summaries| Cohere
-        Summarizer -->|Generate Summaries| Anthropic
-    end
-    
-    subgraph "Data Flow"
-        GitHub -->|Stars, Velocity,<br/>Topics, Forks| Fetchers
-        GitHubExplore -->|Collections| Fetchers
-        HFPapers -->|Papers, Authors,<br/>Upvotes, arXiv IDs| Fetchers
-        HFSpaces -->|Spaces, Likes,<br/>SDKs| Fetchers
+        subgraph Processing["🔄 Processing"]
+            Ranker[ranker.py<br/>Score & Sort]
+            Generator[generator.py<br/>Enrich Data]
+        end
         
-        Fetchers -->|Raw Items| Ranker
-        Ranker -->|Scored & Ranked<br/>Top N Items| Generator
-        Generator -->|Items + Context| Summarizer
-        Summarizer -->|AI Summary<br/>Trending Reason| Generator
-        Generator -->|Jinja2 Template| HTML
+        subgraph AI["🤖 AI Summarization"]
+            Summarizer[summarizer.py]
+            LocalLLM[local_llm.py<br/>No API needed]
+            Cache[cache_manager.py<br/>summary_cache.json]
+        end
     end
-    
-    subgraph "Configuration"
-        Config[config.py]
-        Config -.->|Settings| Fetchers
-        Config -.->|Weights| Ranker
-        Config -.->|API Keys| Summarizer
+
+    subgraph Providers["☁️ AI Providers (Optional)"]
+        Groq[Groq API<br/>Free]
+        Cohere[Cohere API]
+        Anthropic[Anthropic Claude]
     end
+
+    subgraph Sources["🌐 Data Sources"]
+        GitHub[(GitHub)]
+        HuggingFace[(HuggingFace)]
+    end
+
+    UI --> API
+    App --> Components
     
-    style CLI fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
-    style HTML fill:#34c759,stroke:#333,stroke-width:2px,color:#fff
-    style Cohere fill:#ff9800,stroke:#333,stroke-width:2px,color:#fff
-    style Anthropic fill:#764ba2,stroke:#333,stroke-width:2px,color:#fff
-    style Summarizer fill:#667eea,stroke:#333,stroke-width:2px,color:#fff
+    API --> GH & HFP & HFS
+    GH & HFP & HFS --> Ranker
+    Ranker --> Generator
+    Generator --> Summarizer
+    
+    Summarizer --> LocalLLM
+    Summarizer -.-> Groq & Cohere & Anthropic
+    Summarizer <--> Cache
+    
+    GH --> GitHub
+    HFP & HFS --> HuggingFace
+
+    style LocalLLM fill:#10b981,color:#fff
+    style Cache fill:#6366f1,color:#fff
+    style UI fill:#3b82f6,color:#fff
+    style API fill:#f59e0b,color:#fff
 ```
 
-### Data Flow Steps
+---
 
-1. **CLI Invocation** → User runs `python main.py` with options
-2. **Fetchers** → Parallel collection from multiple sources:
-   - GitHub Trending (web scraping)
-   - Hugging Face Papers (web scraping)
-   - Hugging Face Spaces (official API)
-   - GitHub Explore Collections (web scraping)
-3. **Ranker** → Scores items based on:
-   - Popularity metrics (40%)
-   - Growth velocity (30%)
-   - Recency (30%)
-4. **Generator** → Takes top N ranked items
-5. **AI Summarizer** → For each item:
-   - Builds context from metadata
-   - Calls Cohere or Anthropic API
-   - Generates concise summary
-   - Explains trending reasons
-6. **Template Rendering** → Jinja2 renders HTML with enriched data
-7. **Output** → Beautiful HTML digest with AI summaries & copy buttons
+## 🔌 API Reference
+
+The backend runs on `http://localhost:8000`
+
+### Core Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/generate` | Fetch and return trending AI content |
+| `GET` | `/api/settings` | Get current LLM provider settings |
+| `POST` | `/api/settings/provider` | Change active AI provider |
+| `POST` | `/api/settings/api-key` | Save an API key |
+| `DELETE` | `/api/settings/api-key/{provider}` | Remove an API key |
+
+### Summary Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/populate-summaries` | Generate summaries for items |
+| `POST` | `/api/check-summaries` | Check which items need summaries |
+| `GET` | `/api/cache-stats` | Get cache statistics |
+
+### Request Examples
+
+**Generate Content:**
+```bash
+curl -X POST http://localhost:8000/api/generate \
+  -H "Content-Type: application/json" \
+  -d '{"time_range": "daily", "limit": 50, "disable_ai": false}'
+```
+
+**Populate Summaries:**
+```bash
+curl -X POST http://localhost:8000/api/populate-summaries \
+  -H "Content-Type: application/json" \
+  -d '{"items": [...], "force_refresh": false}'
+```
+
+**Change Provider:**
+```bash
+curl -X POST http://localhost:8000/api/settings/provider \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "groq", "model": "llama-3.3-70b-versatile"}'
+```
 
 ---
 
-## ✨ Features
+## 🚀 Quick Start (5 Minutes)
 
-### 📊 **Multi-Source Aggregation**
-- 🔥 **GitHub Trending** - Hottest repos with star velocity tracking
-- 📄 **Hugging Face Papers** - Latest research from arXiv & HF Daily Papers
-- 🚀 **Hugging Face Spaces** - Trending interactive ML demos
-- 📦 **GitHub Explore** - Curated collections (coming soon)
-
-### 🎨 **Beautiful Design**
-- Clean, modern card-based layout inspired by Apple Newsroom
-- Responsive design that works on all devices
-- Smart typography and spacing
-- Smooth animations and hover effects
-
-### 🎯 **Smart Ranking**
-- Popularity metrics (stars, likes, upvotes)
-- Growth velocity (stars/day)
-- Real-time trending indicators
-- Topic categorization and tags
-
-### 🤖 **AI-Powered Insights** ✨ NEW!
-- Automatic one-sentence summaries for each item
-- AI-generated trending explanations
-- Powered by Cohere or Anthropic Claude
-- Grounded in real metrics and descriptions
-- One-click copy to clipboard
-
-### ⚙️ **Flexible & Customizable**
-- Multiple time ranges: daily, weekly, monthly, or custom
-- Configurable sources and filters
-- Language-specific trending (Python, TypeScript, Jupyter, etc.)
-- Easy branding customization
-- Optional AI summaries (can be disabled)
-
-### 🤖 **Automation Ready**
-- CLI interface for easy scripting
-- Supports Windows Task Scheduler, cron, GitHub Actions
-- One-command digest generation
-- Optional auto-open in browser
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
+### What You Need
 - Python 3.8 or higher
-- pip package manager
-- (Optional) Cohere or Anthropic API key for AI summaries
+- Node.js (for the web interface)
 
-### Installation
+### Step 1: Download the Project
 
-1. **Clone the repository**
 ```bash
 git clone https://github.com/hoodini/yuv-ai-trends.git
 cd yuv-ai-trends
 ```
 
-2. **Install dependencies**
+### Step 2: Set Up Python Environment
+
 ```bash
+# Create a virtual environment (keeps things clean)
+python -m venv .venv
+
+# Activate it:
+# On Windows:
+.venv\Scripts\activate
+# On Mac/Linux:
+source .venv/bin/activate
+
+# Install Python packages
 pip install -r requirements.txt
 ```
 
-3. **(Optional) Set up AI API key**
+### Step 3: Set Up the Web Interface
+
 ```bash
-# For Cohere (recommended - faster)
-export COHERE_API_KEY="your-api-key-here"
-
-# OR for Anthropic Claude
-export ANTHROPIC_API_KEY="your-api-key-here"
-
-# Get your free API key:
-# Cohere: https://dashboard.cohere.com/api-keys
-# Anthropic: https://console.anthropic.com/
+cd ui
+npm install
+cd ..
 ```
 
-4. **Generate your first digest**
-```bash
-# With AI summaries (if API key is set)
-python main.py --range daily --open
+### Step 4: Create Your Settings File
 
-# Without AI summaries
-python main.py --range daily --open --no-ai
+Create a file called `.env` in the main folder:
+
+```bash
+# Copy this into your .env file:
+LLM_PROVIDER=local_wasm
 ```
 
-That's it! Your browser will open with today's AI trends digest. 🎉
+That's it! The app will use the built-in summarizer - no API key needed.
+
+### Step 5: Start the App
+
+**Option A: Use the startup script (Recommended)**
+```powershell
+# On Windows:
+.\start_app.ps1
+```
+
+**Option B: Start manually**
+```bash
+# Terminal 1 - Start the backend:
+python api.py
+
+# Terminal 2 - Start the frontend:
+cd ui
+npm run dev
+```
+
+### Step 6: Open the App
+
+Go to `http://localhost:5173` in your browser and click "Generate" to fetch the latest trends!
 
 ---
 
-## 📖 Usage
+## 🤖 AI Summary Options
 
-### Basic Commands
+The app generates summaries explaining **What** each project does, what problem it **Solves**, and **How** it works.
+
+### Option 1: Local Mode (Default - No API Key Needed)
+
+Works immediately! Uses smart keyword analysis to generate summaries from project metadata.
 
 ```bash
-# Daily digest (default)
-python main.py --range daily
-
-# Weekly digest
-python main.py --range weekly
-
-# Monthly digest
-python main.py --range monthly
-
-# Custom date range (14 days)
-python main.py --days 14
-
-# Limit number of items
-python main.py --range daily --limit 30
-
-# Auto-open in browser
-python main.py --range daily --open
-
-# Custom output filename
-python main.py --range daily --output my_digest.html
+# In your .env file:
+LLM_PROVIDER=local_wasm
 ```
 
-### Command-Line Options
+**Best for:** Quick setup, privacy-focused users, offline use
 
-| Option | Description | Example |
-|--------|-------------|---------|
-| `--range` | Time range: daily, weekly, monthly | `--range weekly` |
-| `--days` | Custom number of days | `--days 7` |
-| `--limit` | Max items in digest | `--limit 50` |
-| `--open` | Open in browser after generation | `--open` |
-| `--output` | Custom output filename | `--output weekly.html` |
-| `--no-ai` | Disable AI-powered summaries | `--no-ai` |
+### Option 2: Groq (Free & Fast)
+
+Get a free API key from [console.groq.com](https://console.groq.com) - it's instant and free!
+
+```bash
+# In your .env file:
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_key_here
+```
+
+**Best for:** High-quality summaries at no cost
+
+### Option 3: Cohere (Free Tier Available)
+
+Sign up at [dashboard.cohere.com](https://dashboard.cohere.com)
+
+```bash
+# In your .env file:
+LLM_PROVIDER=cohere
+COHERE_API_KEY=your_key_here
+```
+
+**Best for:** Production use, reliable API
+
+### Option 4: Anthropic Claude (Highest Quality)
+
+Get an API key from [console.anthropic.com](https://console.anthropic.com)
+
+```bash
+# In your .env file:
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=your_key_here
+```
+
+**Best for:** Most detailed and accurate summaries
 
 ---
 
-## ⚙️ Configuration
+## 📊 What Data Does It Fetch?
 
-Edit `config.py` to customize your digest:
+The app collects trending content from:
+
+| Source | What It Gets | Examples |
+|--------|--------------|----------|
+| **GitHub Trending** | Hot repositories | Stars, language, topics, daily growth |
+| **HuggingFace Papers** | AI research papers | Titles, authors, upvotes |
+| **HuggingFace Spaces** | ML demos & apps | Likes, SDK used, creator |
+
+---
+
+## ⚙️ Configuration Options
+
+### Time Range
+
+Choose how far back to look for trends:
+
+```bash
+# In the web UI, select:
+# - 24H PROTOCOL (daily)
+# - 7-DAY DIGEST (weekly)
+# - 30-DAY REPORT (monthly)
+```
+
+### Customize in config.py
 
 ```python
-# GitHub settings
+# Which programming languages to track
 GITHUB_LANGUAGES = ["python", "jupyter-notebook", "typescript"]
-GITHUB_TOPICS = ["machine-learning", "deep-learning", "llm", "generative-ai"]
 
-# Hugging Face settings
+# How many items to show
 HF_SPACES_TRENDING_LIMIT = 20
 
-# Scoring weights (adjust to your preference)
+# How items are ranked (must add up to 1.0)
 SCORING_WEIGHTS = {
-    "stars_weight": 0.4,      # GitHub stars importance
-    "recency_weight": 0.3,    # How recent matters
-    "velocity_weight": 0.3,   # Growth rate importance
+    "stars_weight": 0.4,      # Popularity (stars/likes)
+    "recency_weight": 0.3,    # How new it is
+    "velocity_weight": 0.3,   # How fast it's growing
 }
-
-# AI Summarization settings
-AI_SUMMARIES_ENABLED = True  # Set to False to disable globally
-AI_MAX_WORKERS = 3  # Parallel API calls (lower for rate limits)
 ```
-
-### API Key Setup
-
-Create a `.env` file or set environment variables:
-
-```bash
-# Option 1: Cohere (recommended - faster, generous free tier)
-COHERE_API_KEY=your_cohere_key_here
-
-# Option 2: Anthropic Claude (more detailed summaries)
-ANTHROPIC_API_KEY=your_anthropic_key_here
-```
-
-The system will auto-detect which API key is available and use it.
 
 ---
 
-## 🤖 Automation
+## 🔧 Troubleshooting
 
-### Windows (Task Scheduler)
+### "Port 8000 already in use"
 
-**PowerShell command:**
+Another program is using that port. Find and stop it:
+
 ```powershell
-$action = New-ScheduledTaskAction -Execute "python" -Argument "C:\path\to\news\main.py --range daily --open"
-$trigger = New-ScheduledTaskTrigger -Daily -At 8am
-Register-ScheduledTask -Action $action -Trigger $trigger -TaskName "AITrendsDaily"
+# On Windows:
+netstat -ano | findstr :8000
+taskkill /PID <the_number_you_see> /F
 ```
 
-### Linux/Mac (Cron)
+### "No summaries showing"
 
-```bash
-# Edit crontab
-crontab -e
+1. Check your `.env` file exists and has `LLM_PROVIDER=local_wasm`
+2. Restart the backend: `python api.py`
+3. Try generating again
 
-# Add this line for daily 8am execution
-0 8 * * * cd /path/to/news && python main.py --range daily
-```
+### "API rate limit error"
 
-### GitHub Actions
+If using Groq/Cohere/Anthropic:
+- Wait a minute and try again
+- Switch to `local_wasm` mode as fallback
+- The app automatically falls back to local mode if API fails
 
-Create `.github/workflows/daily-digest.yml`:
+### Summaries show "Details not available"
 
-```yaml
-name: Daily AI Trends
-on:
-  schedule:
-    - cron: '0 8 * * *'  # 8am UTC daily
-jobs:
-  generate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: '3.10'
-      - run: pip install -r requirements.txt
-      - run: python main.py --range daily
-```
+This happens when:
+- The project has no description on GitHub/HuggingFace
+- The cache has old data
 
-See `AUTOMATION.md` for more detailed automation options.
+**Fix:** The app auto-cleans bad cache entries. Just generate again.
 
 ---
 
-## 📁 Project Structure
+## 📁 Project Files Explained
 
 ```
 yuv-ai-trends/
-├── main.py              # CLI entry point & orchestration
-├── config.py            # Configuration settings
-├── fetchers.py          # Data collection from sources
-├── ranker.py            # Scoring & ranking algorithms
-├── generator.py         # HTML digest generation
-├── summarizer.py        # 🆕 AI-powered summaries (Cohere/Anthropic)
-├── hf_mcp.py           # Hugging Face MCP integration
-├── templates/
-│   └── digest.html      # Beautiful HTML template w/ AI sections
-├── output/              # Generated digests
-├── requirements.txt     # Python dependencies
-├── .env.example        # API key template
-├── README.md           # You are here!
-└── AUTOMATION.md       # Automation guides
+├── api.py              # Backend server (handles data fetching)
+├── main.py             # Command-line version
+├── config.py           # Settings (languages, limits, weights)
+├── fetchers.py         # Gets data from GitHub & HuggingFace
+├── ranker.py           # Scores and sorts items
+├── generator.py        # Creates the output
+├── summarizer.py       # AI summary generation
+├── local_llm.py        # Built-in summarizer (no API needed)
+├── cache_manager.py    # Saves summaries to avoid re-processing
+├── .env                # Your settings (create this yourself)
+├── summary_cache.json  # Saved summaries (auto-generated)
+├── ui/                 # Web interface (React)
+│   ├── src/
+│   │   ├── App.jsx     # Main app component
+│   │   └── components/ # UI pieces
+│   └── package.json    # Node.js dependencies
+└── start_app.ps1       # One-click startup script
 ```
 
 ---
 
-## 🎨 Customization
+## 🖥️ Command-Line Usage (Optional)
 
-### Branding
+Don't need the web UI? Use the command line:
 
-Edit `templates/digest.html` header section to customize branding:
+```bash
+# Generate a daily digest and open in browser
+python main.py --range daily --open
 
-```html
-<header>
-    <div>
-        <strong>Your Name</strong> • Your Title • <a href="https://yoursite.com">YourSite</a>
-    </div>
-    <h1>🤖 Your AI Trends Title</h1>
-</header>
+# Weekly digest, limit to 30 items
+python main.py --range weekly --limit 30
+
+# Skip AI summaries
+python main.py --range daily --no-ai
+
+# Save to specific file
+python main.py --range daily --output my_digest.html
 ```
-
-### Styling
-
-The template uses clean, modern CSS. Key classes to customize:
-
-- `.item` - Card styling
-- `.item-title` - Title appearance
-- `.section-title` - Section headers
-- `header` - Top banner gradient
-
----
-
-## 🔧 Technical Details
-
-### Data Sources
-
-1. **GitHub Trending**: Web scraping with BeautifulSoup
-2. **Hugging Face Papers**: HF Papers page scraping + arXiv metadata
-3. **Hugging Face Spaces**: Official HF Hub API
-4. **GitHub Explore**: Web scraping (limited availability)
-
-### Ranking Algorithm
-
-Items are scored based on:
-- **Popularity**: Stars, likes, upvotes (40%)
-- **Velocity**: Recent growth rate (30%)
-- **Recency**: How recent the item is (30%)
-
-Scores are normalized to 0-100 and items are sorted accordingly.
-
-### Technologies
-
-- **Python 3.8+**: Core language
-- **Requests**: HTTP client
-- **BeautifulSoup4**: HTML parsing
-- **Hugging Face Hub**: Official API client
-- **Jinja2**: HTML templating
-- **Click**: CLI interface
-- **Cohere SDK**: AI summary generation (primary)
-- **Anthropic SDK**: Alternative AI provider
-- **Concurrent Futures**: Parallel API calls
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Here are some ways you can help:
+Found a bug? Have an idea? Contributions welcome!
 
-- 🐛 Report bugs and issues
-- 💡 Suggest new features or data sources
-- 🎨 Improve the design/layout
-- 📖 Improve documentation
-- 🔧 Submit pull requests
-
-### Development Setup
-
-```bash
-# Fork and clone the repo
-git clone https://github.com/yourusername/yuv-ai-trends.git
-
-# Create a virtual environment
-python -m venv .venv
-source .venv/bin/activate  # or .venv\Scripts\activate on Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Make your changes and test
-python main.py --range daily --open
-```
+1. Fork the repository
+2. Create your feature branch
+3. Make your changes
+4. Submit a pull request
 
 ---
 
 ## 📝 License
 
-MIT License - feel free to use this project for personal or commercial purposes.
+MIT License - use it however you want!
 
 ---
 
 ## 👤 Author
 
-**Yuval Avidani**
-- 🌐 Website: [YUV.AI](https://yuv.ai)
-- 💼 AI Builder & Speaker
-- 🚀 Passionate about democratizing AI knowledge
-
----
-
-## 🙏 Acknowledgments
-
-- GitHub for trending data
-- Hugging Face for Papers and Spaces API
-- The amazing open-source AI/ML community
-
----
-
-## 📊 Sample Output
-
-The digest includes:
-- **Total Items**: Count of all trending content
-- **GitHub Repos**: With stars, velocity, topics, forks, contributors
-- **Papers**: With authors, arXiv IDs, upvotes, publication dates
-- **Spaces**: With likes, SDKs, creation dates
-- **✨ AI Summaries**: One-sentence description of what each item does
-- **🔥 Trending Explanations**: Why it's trending and what's innovative
-- **📋 Copy Buttons**: One-click copy summary to clipboard
-
-All organized in a beautiful, clickable layout with smooth scrolling and responsive design.
-
-### AI Summary Example
-
-**Project**: UniVA: Universal Video Agent  
-**✨ AI Summary**: UniVA is an open-source, generalist AI agent designed to perform diverse video-related tasks universally.  
-**🔥 Why Trending**: UniVA is trending due to its groundbreaking ability to handle a wide range of video tasks—from editing and summarization to generation—with a single model, democratizing advanced video AI through open-source accessibility.
-
----
-
-## 🔮 Roadmap
-
-- [x] AI-powered summaries (✅ Completed!)
-- [x] Multiple AI provider support (✅ Cohere + Anthropic)
-- [x] Copy to clipboard functionality (✅ Completed!)
-- [ ] Add more data sources (Papers with Code, Reddit, Twitter)
-- [ ] Email digest delivery
-- [ ] RSS feed generation
-- [ ] User accounts and preferences
-- [ ] Mobile app
-- [ ] Sentiment analysis and topic clustering
+**Yuval Avidani** - [YUV.AI](https://yuv.ai)
 
 ---
 

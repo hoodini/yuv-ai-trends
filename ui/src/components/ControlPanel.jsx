@@ -1,9 +1,9 @@
 import React from 'react';
-import { RefreshCw, Zap, Clock, Calendar, Globe } from 'lucide-react';
+import { RefreshCw, Zap, Clock, Calendar, Globe, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { clsx } from 'clsx';
 
-const ControlPanel = ({ timeRange, setTimeRange, onGenerate, isGenerating }) => {
+const ControlPanel = ({ timeRange, setTimeRange, onGenerate, isGenerating, onPopulateSummaries, isPopulating, showPopulate }) => {
     const ranges = [
         { id: 'daily', label: '24H PROTOCOL', icon: Clock },
         { id: 'weekly', label: '7-DAY DIGEST', icon: Calendar },
@@ -64,8 +64,43 @@ const ControlPanel = ({ timeRange, setTimeRange, onGenerate, isGenerating }) => 
                         </div>
                     </div>
 
-                    {/* Action Button */}
-                    <div className="w-full md:w-auto z-10">
+                    {/* Action Buttons */}
+                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto z-10">
+                        {/* Populate Summaries Button */}
+                        {showPopulate && (
+                            <button
+                                onClick={onPopulateSummaries}
+                                disabled={isPopulating}
+                                className={clsx(
+                                    "group relative w-full md:w-auto px-8 py-4 bg-transparent overflow-hidden rounded-xl transition-all duration-300",
+                                    isPopulating ? "cursor-wait" : "hover:scale-105 active:scale-95"
+                                )}
+                            >
+                                {/* Button Background & Glow */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-purple-600 to-pink-600 opacity-80 group-hover:opacity-100 transition-opacity"></div>
+                                <div className="absolute inset-0 bg-[url('/noise.svg')] opacity-20"></div>
+
+                                {/* Content */}
+                                <div className="relative flex items-center justify-center gap-3 font-display font-bold text-white tracking-wider text-sm">
+                                    {isPopulating ? (
+                                        <>
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                            <span>ANALYZING...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4 group-hover:text-yellow-300 transition-colors" />
+                                            <span>POPULATE AI</span>
+                                        </>
+                                    )}
+                                </div>
+
+                                {/* Border Glow */}
+                                <div className="absolute inset-0 border border-white/20 rounded-xl group-hover:border-white/50 transition-colors"></div>
+                            </button>
+                        )}
+                        
+                        {/* Generate Button */}
                         <button
                             onClick={onGenerate}
                             disabled={isGenerating}

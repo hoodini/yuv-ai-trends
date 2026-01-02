@@ -4,6 +4,8 @@ import os
 import time
 from typing import Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from cache_manager import CacheManager
+from local_llm import LocalLLMFallback
 
 
 class AIContentSummarizer:
@@ -21,11 +23,17 @@ class AIContentSummarizer:
         self.provider = provider
         self.api_key = api_key
         self.client = None
+        
+        # Initialize cache manager
+        self.cache = CacheManager()
+        
+        # Initialize local LLM fallback
+        self.local_llm = LocalLLMFallback()
 
         if not self.provider:
             # Check which API key is available, prefer setting from LLM_PROVIDER env var
             provider_pref = os.environ.get("LLM_PROVIDER", "").lower()
-            if provider_pref in ["anthropic", "cohere", "groq"]:
+            if provider_pref in ["anthropic", "cohere", "groq", "local_wasm"]:
                 self.provider = provider_pref
             elif os.environ.get("COHERE_API_KEY"):
                 self.provider = "cohere"
@@ -34,7 +42,8 @@ class AIContentSummarizer:
             elif os.environ.get("GROQ_API_KEY"):
                 self.provider = "groq"
             else:
-                raise ValueError("No API key found. Please set ANTHROPIC_API_KEY, COHERE_API_KEY, or GROQ_API_KEY in environment variables.")
+                self.provider = "local_wasm"
+                print("No API keys found, using local LLM fallback")
 
         # Initialize the appropriate client
         if self.provider == "cohere":
@@ -58,19 +67,29 @@ class AIContentSummarizer:
                 raise ValueError("GROQ_API_KEY not found. Please set it in environment variables.")
             self.client = Groq(api_key=self.api_key)
             print(f"Using Groq API for AI summaries")
+        elif self.provider == "local_wasm":
+            self.client = None
+            print(f"Using Local LLM for AI summaries (WebLLM mode)")
         else:
-            raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic', 'cohere', or 'groq'.")
+            raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic', 'cohere', 'groq', or 'local_wasm'.")
     
-    def generate_summary_and_explanation(self, item: Dict) -> Dict:
+    def generate_summary_and_explanation(self, item: Dict, force_refresh: bool = False) -> Dict:
         """
         Generate one-sentence summary and trending explanation for an item
         
         Args:
             item: Dict containing item data (name, description, source, etc.)
+            force_refresh: If True, bypass cache and regenerate summary
         
         Returns:
             Dict with 'summary' and 'trending_reason' keys
         """
+        # Check cache first unless force refresh
+        if not force_refresh:
+            cached_summary = self.cache.get_summary(item)
+            if cached_summary:
+                return cached_summary
+        
         # Build context based on item type
         source = item.get('source', '')
         name = item.get('name', '')
@@ -127,6 +146,12 @@ SOLVES: [problem/use case]
 HOW: [approach/methodology]"""
 
         try:
+            # If using local_wasm provider, use local LLM directly
+            if self.provider == "local_wasm":
+                result = self.local_llm.generate_summary(item)
+                self.cache.set_summary(item, result)
+                return result
+            
             # Get model from environment or use default
             model = os.environ.get("LLM_MODEL", "")
 
@@ -195,24 +220,47 @@ HOW: [approach/methodology]"""
             # Combine into structured summary
             structured_summary = f"**What:** {what.strip()}\n\n**Solves:** {solves.strip()}\n\n**How:** {how.strip()}"
 
-            return {
+            result = {
                 'summary': structured_summary,
-                'trending_reason': f"{what.strip()} {solves.strip()}",  # Backward compatibility
+                'trending_reason': f"{what.strip()} {solves.strip()}",
                 'what': what.strip(),
                 'solves': solves.strip(),
                 'how': how.strip()
             }
+            
+            # Cache the result
+            self.cache.set_summary(item, result)
+            return result
         
         except Exception as e:
-            print(f"Error generating summary for {name}: {e}")
+            error_str = str(e)
+            is_rate_limit = "429" in error_str or "rate limit" in error_str.lower()
+            
+            if is_rate_limit:
+                print(f"Rate limit hit for {name}, using local fallback")
+            else:
+                print(f"Error generating summary for {name}: {e}")
+            
+            # Try local LLM fallback
+            if self.local_llm.is_available():
+                if not is_rate_limit:
+                    print(f"  Trying local LLM fallback for {name}...")
+                local_result = self.local_llm.generate_summary(item)
+                if local_result:
+                    self.cache.set_summary(item, local_result)
+                    return local_result
+            
+            # Final fallback
             fallback_what = description[:100] + '...' if len(description) > 100 else description
-            return {
+            fallback_result = {
                 'summary': f"**What:** {fallback_what}\n\n**Solves:** Details not available.\n\n**How:** Details not available.",
                 'trending_reason': 'Trending in the AI/ML community.',
                 'what': fallback_what,
                 'solves': 'Details not available.',
                 'how': 'Details not available.'
             }
+            self.cache.set_summary(item, fallback_result)
+            return fallback_result
     
     def enrich_items_batch(self, items: List[Dict], max_workers: int = 3) -> List[Dict]:
         """
@@ -266,3 +314,34 @@ HOW: [approach/methodology]"""
                     time.sleep(delay_between_batches)
         
         return enriched_items
+    
+    def get_items_without_summary(self, items: List[Dict]) -> List[Dict]:
+        """Get list of items that don't have cached summaries"""
+        return self.cache.get_items_without_summary(items)
+    
+    def populate_missing_summaries(self, items: List[Dict], max_workers: int = 3) -> Dict:
+        """Populate summaries for items that don't have them"""
+        items_without_summary = self.get_items_without_summary(items)
+        
+        if not items_without_summary:
+            return {
+                'total_items': len(items),
+                'already_cached': len(items),
+                'newly_populated': 0,
+                'failed': 0
+            }
+        
+        print(f"Populating {len(items_without_summary)} items without summaries...")
+        enriched = self.enrich_items_batch(items_without_summary, max_workers=max_workers)
+        successful = sum(1 for item in enriched if item.get('ai_summary'))
+        
+        return {
+            'total_items': len(items),
+            'already_cached': len(items) - len(items_without_summary),
+            'newly_populated': successful,
+            'failed': len(items_without_summary) - successful
+        }
+    
+    def get_cache_stats(self) -> Dict:
+        """Get cache statistics"""
+        return self.cache.get_cache_stats()

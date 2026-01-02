@@ -24,6 +24,7 @@ from ranker import ContentRanker
 from generator import DigestGenerator
 from utils import sanitize_dict
 from settings_manager import SettingsManager
+from summarizer import AIContentSummarizer
 import uvicorn
 import os
 
@@ -54,6 +55,10 @@ class APIKeyRequest(BaseModel):
 class ProviderRequest(BaseModel):
     provider: str
     model: Optional[str] = None
+
+class PopulateRequest(BaseModel):
+    items: List[Dict]
+    force_refresh: bool = False
 
 @app.post("/api/generate")
 async def generate_news(request: GenerateRequest):
@@ -244,6 +249,84 @@ async def delete_api_key(provider: str):
             raise HTTPException(status_code=400, detail=result['message'])
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/populate-summaries")
+async def populate_summaries(request: PopulateRequest):
+    """Populate AI summaries for items that don't have them"""
+    try:
+        # Check if AI is enabled
+        if not config.AI_SUMMARIES_ENABLED:
+            return Response(
+                content=json.dumps({
+                    'success': False,
+                    'message': 'AI summaries are disabled in configuration'
+                }, ensure_ascii=True),
+                media_type="application/json"
+            )
+        
+        # Initialize summarizer
+        summarizer = AIContentSummarizer()
+        
+        # If force_refresh, regenerate all summaries
+        if request.force_refresh:
+            enriched_items = summarizer.enrich_items_batch(request.items, max_workers=3)
+            result = {
+                'success': True,
+                'total_items': len(request.items),
+                'populated': len([item for item in enriched_items if item.get('ai_summary')]),
+                'message': f'Refreshed summaries for {len(enriched_items)} items'
+            }
+        else:
+            # Only populate missing summaries
+            stats = summarizer.populate_missing_summaries(request.items, max_workers=3)
+            result = {
+                'success': True,
+                **stats,
+                'message': f'Populated {stats["newly_populated"]} new summaries ({stats["already_cached"]} already cached)'
+            }
+        
+        return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
+        
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=error_msg)
+
+@app.get("/api/cache-stats")
+async def get_cache_stats():
+    """Get statistics about the summary cache"""
+    try:
+        summarizer = AIContentSummarizer()
+        stats = summarizer.get_cache_stats()
+        return Response(content=json.dumps(stats, ensure_ascii=True), media_type="application/json")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/check-summaries")
+async def check_summaries(request: PopulateRequest):
+    """Check which items are missing summaries"""
+    try:
+        summarizer = AIContentSummarizer()
+        items_without = summarizer.get_items_without_summary(request.items)
+        
+        result = {
+            'total_items': len(request.items),
+            'with_summary': len(request.items) - len(items_without),
+            'without_summary': len(items_without),
+            'missing_items': [
+                {
+                    'name': item.get('name', ''),
+                    'source': item.get('source', ''),
+                    'url': item.get('url', '')
+                }
+                for item in items_without
+            ]
+        }
+        
+        return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
