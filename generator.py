@@ -10,10 +10,13 @@ import config
 class DigestGenerator:
     """Generate HTML digest from collected content"""
     
-    def __init__(self, use_ai_summaries: bool = True):
+    def __init__(self, use_ai_summaries: bool = True, llm_provider: str = None, llm_model: str = None, api_key: str = None):
         self.template_dir = config.TEMPLATE_DIR
         self.output_dir = config.OUTPUT_DIR
         self.use_ai_summaries = use_ai_summaries
+        self.llm_provider = llm_provider
+        self.llm_model = llm_model
+        self.api_key = api_key
         
         # Create output directory if it doesn't exist
         os.makedirs(self.output_dir, exist_ok=True)
@@ -26,7 +29,11 @@ class DigestGenerator:
         if use_ai_summaries:
             try:
                 from summarizer import AIContentSummarizer
-                self.summarizer = AIContentSummarizer()
+                self.summarizer = AIContentSummarizer(
+                    provider=llm_provider,
+                    api_key=api_key,
+                    model=llm_model
+                )
             except Exception as e:
                 print(f"WARNING: AI summarizer not available: {e}")
                 self.use_ai_summaries = False

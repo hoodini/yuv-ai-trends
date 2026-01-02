@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "framework": "vite",
+  "buildCommand": "cd ui && npm install && npm run build",
+  "outputDirectory": "ui/dist",
+  "installCommand": "cd ui && npm install",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

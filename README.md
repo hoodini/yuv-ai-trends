@@ -2,7 +2,9 @@
 
 > **Your personal AI news assistant - get the latest AI/ML trends with smart summaries, no API key required!**
 
-A news aggregator that fetches trending AI content from GitHub and Hugging Face, then explains what each project does using AI. Works out-of-the-box with a built-in local summarizer, or connect your favorite AI provider for enhanced summaries.
+A privacy-first news aggregator that fetches trending AI content from GitHub and Hugging Face, then explains what each project does using AI. Works out-of-the-box with a built-in local summarizer, or connect your favorite AI provider for enhanced summaries.
+
+**🔒 Privacy First**: All your settings and API keys are stored locally in your browser - never on any server!
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
@@ -10,22 +12,23 @@ A news aggregator that fetches trending AI content from GitHub and Hugging Face,
 
 ---
 
-## 📋 Release Notes (v2.0.0)
+## 📋 Release Notes (v2.1.0 - Production Ready)
 
 ### 🆕 What's New
 
-- **No API Key Required!** - New `local_wasm` mode generates summaries without any external API
-- **Smart Caching** - Summaries are cached locally, auto-cleans invalid entries
+- **🔒 Browser-Based Storage** - API keys stored in localStorage, never on server
+- **No Database Required** - Fully stateless backend, perfect for serverless
+- **No API Key Required!** - `local_wasm` mode generates summaries without any external API
 - **4 AI Providers** - Choose from Local, Groq (free), Cohere, or Anthropic Claude
-- **Better Fallbacks** - Automatically falls back to local mode if API fails or rate-limits
-- **Improved Metadata** - Better summaries for items without descriptions (HuggingFace Spaces)
-- **New API Endpoints** - `/api/populate-summaries`, `/api/cache-stats`, `/api/check-summaries`
+- **Smart Caching** - Summaries cached locally, auto-cleans invalid entries
+- **Production Ready** - Deploy to Vercel + Railway with zero config
 
-### 🐛 Bug Fixes
+### 🏗️ Architecture Changes
 
-- Fixed empty "What" fields in AI summaries
-- Fixed cache returning invalid entries
-- Improved error handling for rate limits
+- API keys sent per-request from browser (not stored on server)
+- Removed server-side settings management
+- Added `/api/validate-key` endpoint for key verification
+- Frontend uses localStorage for all user preferences
 
 ---
 
@@ -34,7 +37,7 @@ A news aggregator that fetches trending AI content from GitHub and Hugging Face,
 ### Main Interface
 ![App with Data](screenshots/app_with_data.png)
 
-### Content Filtering
+### Settings (Privacy-First)
 ![Tabs Section](screenshots/app_tabs_section.png)
 
 ---
@@ -43,14 +46,13 @@ A news aggregator that fetches trending AI content from GitHub and Hugging Face,
 
 ```mermaid
 flowchart TB
-    subgraph Frontend["🖥️ Frontend (React + Vite)"]
-        UI[Web UI<br/>localhost:5173]
-        App[App.jsx]
-        Components[Components<br/>NewsCard, NewsFeed, etc.]
+    subgraph Browser["🖥️ Browser (Your Device)"]
+        UI[React UI]
+        LS[(localStorage<br/>API Keys & Settings)]
     end
 
-    subgraph Backend["⚙️ Backend (FastAPI)"]
-        API[api.py<br/>localhost:8000]
+    subgraph Backend["⚙️ Backend (Stateless)"]
+        API[FastAPI Server]
         
         subgraph Fetchers["📡 Data Fetchers"]
             GH[GitHub Trending]
@@ -58,15 +60,10 @@ flowchart TB
             HFS[HuggingFace Spaces]
         end
         
-        subgraph Processing["🔄 Processing"]
-            Ranker[ranker.py<br/>Score & Sort]
-            Generator[generator.py<br/>Enrich Data]
-        end
-        
         subgraph AI["🤖 AI Summarization"]
             Summarizer[summarizer.py]
             LocalLLM[local_llm.py<br/>No API needed]
-            Cache[cache_manager.py<br/>summary_cache.json]
+            Cache[summary_cache.json]
         end
     end
 
@@ -81,331 +78,260 @@ flowchart TB
         HuggingFace[(HuggingFace)]
     end
 
-    UI --> API
-    App --> Components
-    
+    UI <--> LS
+    UI -->|"Request + API Key"| API
     API --> GH & HFP & HFS
-    GH & HFP & HFS --> Ranker
-    Ranker --> Generator
-    Generator --> Summarizer
+    API --> Summarizer
     
     Summarizer --> LocalLLM
-    Summarizer -.-> Groq & Cohere & Anthropic
+    Summarizer -.->|"With User's Key"| Groq & Cohere & Anthropic
     Summarizer <--> Cache
     
     GH --> GitHub
     HFP & HFS --> HuggingFace
 
+    style LS fill:#10b981,color:#fff
     style LocalLLM fill:#10b981,color:#fff
-    style Cache fill:#6366f1,color:#fff
     style UI fill:#3b82f6,color:#fff
-    style API fill:#f59e0b,color:#fff
 ```
 
----
-
-## 🔌 API Reference
-
-The backend runs on `http://localhost:8000`
-
-### Core Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/generate` | Fetch and return trending AI content |
-| `GET` | `/api/settings` | Get current LLM provider settings |
-| `POST` | `/api/settings/provider` | Change active AI provider |
-| `POST` | `/api/settings/api-key` | Save an API key |
-| `DELETE` | `/api/settings/api-key/{provider}` | Remove an API key |
-
-### Summary Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `POST` | `/api/populate-summaries` | Generate summaries for items |
-| `POST` | `/api/check-summaries` | Check which items need summaries |
-| `GET` | `/api/cache-stats` | Get cache statistics |
-
-### Request Examples
-
-**Generate Content:**
-```bash
-curl -X POST http://localhost:8000/api/generate \
-  -H "Content-Type: application/json" \
-  -d '{"time_range": "daily", "limit": 50, "disable_ai": false}'
-```
-
-**Populate Summaries:**
-```bash
-curl -X POST http://localhost:8000/api/populate-summaries \
-  -H "Content-Type: application/json" \
-  -d '{"items": [...], "force_refresh": false}'
-```
-
-**Change Provider:**
-```bash
-curl -X POST http://localhost:8000/api/settings/provider \
-  -H "Content-Type: application/json" \
-  -d '{"provider": "groq", "model": "llama-3.3-70b-versatile"}'
-```
+**Key Privacy Feature**: Your API keys never leave your browser except when making AI requests directly to the provider you choose.
 
 ---
 
 ## 🚀 Quick Start (5 Minutes)
 
-### What You Need
-- Python 3.8 or higher
-- Node.js (for the web interface)
+### Prerequisites
+- Python 3.8+ 
+- Node.js 18+
+- Git
 
-### Step 1: Download the Project
+### Step 1: Clone and Install
 
 ```bash
+# Clone the repository
 git clone https://github.com/hoodini/yuv-ai-trends.git
 cd yuv-ai-trends
-```
 
-### Step 2: Set Up Python Environment
-
-```bash
-# Create a virtual environment (keeps things clean)
+# Create Python virtual environment
 python -m venv .venv
 
-# Activate it:
-# On Windows:
-.venv\Scripts\activate
-# On Mac/Linux:
-source .venv/bin/activate
+# Activate it (Windows)
+.\.venv\Scripts\Activate.ps1
 
-# Install Python packages
+# Install Python dependencies
 pip install -r requirements.txt
-```
 
-### Step 3: Set Up the Web Interface
-
-```bash
+# Install frontend dependencies
 cd ui
 npm install
 cd ..
 ```
 
-### Step 4: Create Your Settings File
+### Step 2: Start the App
 
-Create a file called `.env` in the main folder:
-
-```bash
-# Copy this into your .env file:
-LLM_PROVIDER=local_wasm
-```
-
-That's it! The app will use the built-in summarizer - no API key needed.
-
-### Step 5: Start the App
-
-**Option A: Use the startup script (Recommended)**
+**Option A: One-click (Windows)**
 ```powershell
-# On Windows:
 .\start_app.ps1
 ```
 
-**Option B: Start manually**
+**Option B: Manual**
 ```bash
-# Terminal 1 - Start the backend:
+# Terminal 1 - Backend
 python api.py
 
-# Terminal 2 - Start the frontend:
+# Terminal 2 - Frontend
 cd ui
 npm run dev
 ```
 
-### Step 6: Open the App
+### Step 3: Open and Use
 
-Go to `http://localhost:5173` in your browser and click "Generate" to fetch the latest trends!
-
----
-
-## 🤖 AI Summary Options
-
-The app generates summaries explaining **What** each project does, what problem it **Solves**, and **How** it works.
-
-### Option 1: Local Mode (Default - No API Key Needed)
-
-Works immediately! Uses smart keyword analysis to generate summaries from project metadata.
-
-```bash
-# In your .env file:
-LLM_PROVIDER=local_wasm
-```
-
-**Best for:** Quick setup, privacy-focused users, offline use
-
-### Option 2: Groq (Free & Fast)
-
-Get a free API key from [console.groq.com](https://console.groq.com) - it's instant and free!
-
-```bash
-# In your .env file:
-LLM_PROVIDER=groq
-GROQ_API_KEY=your_key_here
-```
-
-**Best for:** High-quality summaries at no cost
-
-### Option 3: Cohere (Free Tier Available)
-
-Sign up at [dashboard.cohere.com](https://dashboard.cohere.com)
-
-```bash
-# In your .env file:
-LLM_PROVIDER=cohere
-COHERE_API_KEY=your_key_here
-```
-
-**Best for:** Production use, reliable API
-
-### Option 4: Anthropic Claude (Highest Quality)
-
-Get an API key from [console.anthropic.com](https://console.anthropic.com)
-
-```bash
-# In your .env file:
-LLM_PROVIDER=anthropic
-ANTHROPIC_API_KEY=your_key_here
-```
-
-**Best for:** Most detailed and accurate summaries
+1. Open http://localhost:5173
+2. Click **"Generate"** to fetch AI news
+3. It works immediately with Local Web LLM!
+4. (Optional) Go to **Settings** to add your own API keys
 
 ---
 
-## 📊 What Data Does It Fetch?
+## ⚙️ AI Provider Options
 
-The app collects trending content from:
+| Provider | Cost | Speed | Quality | API Key Required |
+|----------|------|-------|---------|------------------|
+| **Local Web LLM** | Free | Fast | Good | ❌ No |
+| **Groq** | Free tier | Very Fast | Great | ✅ Yes |
+| **Cohere** | Free tier | Fast | Great | ✅ Yes |
+| **Anthropic** | Paid | Medium | Excellent | ✅ Yes |
 
-| Source | What It Gets | Examples |
-|--------|--------------|----------|
-| **GitHub Trending** | Hot repositories | Stars, language, topics, daily growth |
-| **HuggingFace Papers** | AI research papers | Titles, authors, upvotes |
-| **HuggingFace Spaces** | ML demos & apps | Likes, SDK used, creator |
+### Get Free API Keys
+
+- **Groq** (Recommended): https://console.groq.com/keys
+- **Cohere**: https://dashboard.cohere.com/api-keys
+- **Anthropic**: https://console.anthropic.com/settings/keys
 
 ---
 
-## ⚙️ Configuration Options
+## 🌐 Deploy to Production
 
-### Time Range
+### Deploy to Vercel + Railway (Free)
 
-Choose how far back to look for trends:
+This app is designed for split deployment:
+- **Frontend** → Vercel (static hosting)
+- **Backend** → Railway (Python server)
 
-```bash
-# In the web UI, select:
-# - 24H PROTOCOL (daily)
-# - 7-DAY DIGEST (weekly)
-# - 30-DAY REPORT (monthly)
+#### Step 1: Deploy Backend to Railway
+
+1. Go to [railway.app/new](https://railway.app/new)
+2. Click "Deploy from GitHub repo"
+3. Select your forked repo
+4. Railway auto-detects Python
+5. Copy your Railway URL (e.g., `https://your-app.up.railway.app`)
+
+#### Step 2: Deploy Frontend to Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new)
+2. Import your GitHub repo
+3. Configure:
+   - **Root Directory**: `ui`
+   - **Framework Preset**: Vite
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+4. Add Environment Variable:
+   - `VITE_API_URL` = `https://your-app.up.railway.app`
+5. Deploy!
+
+#### Vercel Settings Summary
+
+| Setting | Value |
+|---------|-------|
+| Root Directory | `ui` |
+| Framework | Vite |
+| Build Command | `npm run build` |
+| Output Directory | `dist` |
+| Node.js Version | 18.x |
+
+| Environment Variable | Value |
+|---------------------|-------|
+| `VITE_API_URL` | Your Railway backend URL |
+
+That's it! Your app is now live. Users can:
+1. Use Local Web LLM (no API key needed)
+2. Add their own API keys in Settings (stored in their browser)
+
+---
+
+## 🔒 Privacy & Security
+
+### How API Keys Are Handled
+
+1. **Storage**: Keys stored in browser's `localStorage` only
+2. **Transmission**: Keys sent only when making AI requests
+3. **Server**: Backend is stateless - no keys stored server-side
+4. **Validation**: Keys validated via `/api/validate-key` endpoint
+
+### What Data is Collected
+
+- **Nothing!** This app collects no user data
+- No analytics, no tracking, no cookies
+- Summary cache is stored locally on your machine
+
+---
+
+## 🛠️ API Reference
+
+### `POST /api/generate`
+Generate AI news digest with summaries.
+
+```json
+{
+  "time_range": "daily",
+  "limit": 50,
+  "disable_ai": false,
+  "llm_provider": "local_wasm",
+  "llm_model": "",
+  "api_key": null
+}
 ```
 
-### Customize in config.py
+### `POST /api/validate-key`
+Validate an API key without storing it.
 
-```python
-# Which programming languages to track
-GITHUB_LANGUAGES = ["python", "jupyter-notebook", "typescript"]
+```json
+{
+  "provider": "groq",
+  "api_key": "gsk_..."
+}
+```
 
-# How many items to show
-HF_SPACES_TRENDING_LIMIT = 20
+### `GET /api/settings`
+Get available providers and models.
 
-# How items are ranked (must add up to 1.0)
-SCORING_WEIGHTS = {
-    "stars_weight": 0.4,      # Popularity (stars/likes)
-    "recency_weight": 0.3,    # How new it is
-    "velocity_weight": 0.3,   # How fast it's growing
+### `POST /api/populate-summaries`
+Populate AI summaries for items.
+
+```json
+{
+  "items": [...],
+  "force_refresh": false,
+  "llm_provider": "groq",
+  "api_key": "gsk_..."
 }
 ```
 
 ---
 
-## 🔧 Troubleshooting
-
-### "Port 8000 already in use"
-
-Another program is using that port. Find and stop it:
-
-```powershell
-# On Windows:
-netstat -ano | findstr :8000
-taskkill /PID <the_number_you_see> /F
-```
-
-### "No summaries showing"
-
-1. Check your `.env` file exists and has `LLM_PROVIDER=local_wasm`
-2. Restart the backend: `python api.py`
-3. Try generating again
-
-### "API rate limit error"
-
-If using Groq/Cohere/Anthropic:
-- Wait a minute and try again
-- Switch to `local_wasm` mode as fallback
-- The app automatically falls back to local mode if API fails
-
-### Summaries show "Details not available"
-
-This happens when:
-- The project has no description on GitHub/HuggingFace
-- The cache has old data
-
-**Fix:** The app auto-cleans bad cache entries. Just generate again.
-
----
-
-## 📁 Project Files Explained
+## 📁 Project Structure
 
 ```
 yuv-ai-trends/
-├── api.py              # Backend server (handles data fetching)
-├── main.py             # Command-line version
-├── config.py           # Settings (languages, limits, weights)
-├── fetchers.py         # Gets data from GitHub & HuggingFace
-├── ranker.py           # Scores and sorts items
-├── generator.py        # Creates the output
+├── api.py              # FastAPI backend (stateless)
 ├── summarizer.py       # AI summary generation
-├── local_llm.py        # Built-in summarizer (no API needed)
-├── cache_manager.py    # Saves summaries to avoid re-processing
-├── .env                # Your settings (create this yourself)
-├── summary_cache.json  # Saved summaries (auto-generated)
-├── ui/                 # Web interface (React)
-│   ├── src/
-│   │   ├── App.jsx     # Main app component
-│   │   └── components/ # UI pieces
-│   └── package.json    # Node.js dependencies
-└── start_app.ps1       # One-click startup script
+├── local_llm.py        # Built-in summarizer (no API)
+├── cache_manager.py    # Summary caching
+├── fetchers.py         # GitHub & HuggingFace scrapers
+├── ranker.py           # Content scoring
+├── config.py           # Configuration
+├── requirements.txt    # Python dependencies
+├── Procfile            # Railway deployment
+├── railway.json        # Railway config
+├── vercel.json         # Vercel config
+└── ui/                 # React frontend
+    ├── src/
+    │   ├── App.jsx     # Main app (uses localStorage)
+    │   └── components/
+    │       └── Settings.jsx  # localStorage-based settings
+    ├── package.json
+    └── .env.production # Production API URL
 ```
 
 ---
 
-## 🖥️ Command-Line Usage (Optional)
+## 🐛 Troubleshooting
 
-Don't need the web UI? Use the command line:
+### "Failed to connect to neural network"
+- Make sure backend is running: `python api.py`
+- Check it's on port 8000: http://localhost:8000/api/settings
 
-```bash
-# Generate a daily digest and open in browser
-python main.py --range daily --open
+### "API key invalid"
+- Go to Settings → API Keys
+- Make sure you copied the full key
+- Try the "Validate & Save" button
 
-# Weekly digest, limit to 30 items
-python main.py --range weekly --limit 30
+### Summaries show "Details not available"
+- This happens for items without descriptions
+- Local LLM does its best with available info
+- Try a different AI provider for better results
 
-# Skip AI summaries
-python main.py --range daily --no-ai
-
-# Save to specific file
-python main.py --range daily --output my_digest.html
-```
+### CORS errors in production
+- Make sure `VITE_API_URL` is set correctly in Vercel
+- Backend should allow your Vercel domain (uses `*` by default)
 
 ---
 
 ## 🤝 Contributing
 
-Found a bug? Have an idea? Contributions welcome!
-
 1. Fork the repository
-2. Create your feature branch
+2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
 

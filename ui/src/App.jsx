@@ -6,6 +6,20 @@ import ControlPanel from './components/ControlPanel';
 import NewsFeed from './components/NewsFeed';
 import LoadingState from './components/LoadingState';
 import TopHighlights from './components/TopHighlights';
+import { getStoredSettings, getApiKeyForProvider } from './components/Settings';
+
+// API URL - configurable for production deployment
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+// Helper to get LLM config from localStorage
+const getLLMConfig = () => {
+    const settings = getStoredSettings();
+    return {
+        llm_provider: settings.provider,
+        llm_model: settings.model,
+        api_key: settings.provider !== 'local_wasm' ? getApiKeyForProvider(settings.provider) : null
+    };
+};
 
 function App() {
     const [timeRange, setTimeRange] = useState('daily');
@@ -21,10 +35,12 @@ function App() {
         setItems([]);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/generate', {
+            const llmConfig = getLLMConfig();
+            const response = await axios.post(`${API_URL}/api/generate`, {
                 time_range: timeRange,
                 limit: 50,
-                disable_ai: false
+                disable_ai: false,
+                ...llmConfig
             });
 
             setItems(response.data.items);
@@ -47,17 +63,20 @@ function App() {
         setError(null);
 
         try {
-            const response = await axios.post('http://localhost:8000/api/populate-summaries', {
+            const llmConfig = getLLMConfig();
+            const response = await axios.post(`${API_URL}/api/populate-summaries`, {
                 items: items,
-                force_refresh: false
+                force_refresh: false,
+                ...llmConfig
             });
 
             if (response.data.success) {
                 // Re-fetch to get updated items with summaries
-                const refreshResponse = await axios.post('http://localhost:8000/api/generate', {
+                const refreshResponse = await axios.post(`${API_URL}/api/generate`, {
                     time_range: timeRange,
                     limit: 50,
-                    disable_ai: false
+                    disable_ai: false,
+                    ...llmConfig
                 });
                 setItems(refreshResponse.data.items);
                 

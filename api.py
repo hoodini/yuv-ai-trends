@@ -23,7 +23,6 @@ from fetchers import GitHubTrendingFetcher, GitHubExploreFetcher, HuggingFaceFet
 from ranker import ContentRanker
 from generator import DigestGenerator
 from utils import sanitize_dict
-from settings_manager import SettingsManager
 from summarizer import AIContentSummarizer
 import uvicorn
 import os
@@ -33,10 +32,18 @@ app = FastAPI(title="AI Tech News API")
 # Configure JSON encoding to handle all Unicode characters
 app.state.json_encoder = lambda obj: json.dumps(obj, ensure_ascii=False)
 
+# Get allowed origins from environment variable or use defaults
+ALLOWED_ORIGINS = os.getenv('ALLOWED_ORIGINS', '').split(',') if os.getenv('ALLOWED_ORIGINS') else []
+DEFAULT_ORIGINS = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+]
+
 # Enable CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development, allow all
+    allow_origins=ALLOWED_ORIGINS + DEFAULT_ORIGINS if ALLOWED_ORIGINS else ["*"],  # Allow all for dev, use ALLOWED_ORIGINS in prod
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,11 +53,14 @@ class GenerateRequest(BaseModel):
     time_range: str = "daily"
     limit: int = 50
     disable_ai: bool = False
+    # User-provided LLM settings (from browser localStorage)
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    api_key: Optional[str] = None
 
 class APIKeyRequest(BaseModel):
     provider: str
     api_key: str
-    validate: bool = True
 
 class ProviderRequest(BaseModel):
     provider: str
@@ -59,6 +69,10 @@ class ProviderRequest(BaseModel):
 class PopulateRequest(BaseModel):
     items: List[Dict]
     force_refresh: bool = False
+    # User-provided LLM settings (from browser localStorage)
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    api_key: Optional[str] = None
 
 @app.post("/api/generate")
 async def generate_news(request: GenerateRequest):
@@ -77,7 +91,14 @@ async def generate_news(request: GenerateRequest):
         
         # Initialize generator with AI summaries unless disabled
         use_ai = config.AI_SUMMARIES_ENABLED and not request.disable_ai
-        generator = DigestGenerator(use_ai_summaries=use_ai)
+        
+        # Pass user-provided LLM settings to generator
+        generator = DigestGenerator(
+            use_ai_summaries=use_ai,
+            llm_provider=request.llm_provider,
+            llm_model=request.llm_model,
+            api_key=request.api_key
+        )
         
         all_items = []
         
@@ -189,66 +210,133 @@ async def generate_news(request: GenerateRequest):
 
 @app.get("/api/settings")
 async def get_settings():
-    """Get current settings including API key status and LLM configuration"""
+    """Get available providers and models (no API key status - keys stored in browser)"""
     try:
-        settings_manager = SettingsManager()
-        settings = settings_manager.get_settings()
+        settings = {
+            'llm_provider': 'local_wasm',  # Default provider
+            'available_providers': {
+                'local_wasm': {
+                    'name': 'Local Web LLM',
+                    'enabled': True,
+                    'description': 'Privacy-focused, runs without any API key',
+                    'requiresKey': False
+                },
+                'groq': {
+                    'name': 'Groq (Free)',
+                    'enabled': True,
+                    'description': 'Ultra-fast inference with free API tier',
+                    'requiresKey': True,
+                    'keyUrl': 'https://console.groq.com/keys'
+                },
+                'cohere': {
+                    'name': 'Cohere',
+                    'enabled': True,
+                    'description': 'Fast and accurate with Command models',
+                    'requiresKey': True,
+                    'keyUrl': 'https://dashboard.cohere.com/api-keys'
+                },
+                'anthropic': {
+                    'name': 'Anthropic Claude',
+                    'enabled': True,
+                    'description': 'High-quality AI summaries with Claude',
+                    'requiresKey': True,
+                    'keyUrl': 'https://console.anthropic.com/settings/keys'
+                }
+            },
+            'models': {
+                'local_wasm': [
+                    {'id': 'local', 'name': 'Built-in Summarizer', 'recommended': True}
+                ],
+                'groq': [
+                    {'id': 'llama-3.3-70b-versatile', 'name': 'Llama 3.3 70B', 'recommended': True},
+                    {'id': 'llama-3.1-70b-versatile', 'name': 'Llama 3.1 70B', 'recommended': False},
+                    {'id': 'mixtral-8x7b-32768', 'name': 'Mixtral 8x7B', 'recommended': False}
+                ],
+                'cohere': [
+                    {'id': 'command-a-03-2025', 'name': 'Command-A (Latest)', 'recommended': True},
+                    {'id': 'command-r-plus', 'name': 'Command R+', 'recommended': False},
+                    {'id': 'command-r', 'name': 'Command R', 'recommended': False}
+                ],
+                'anthropic': [
+                    {'id': 'claude-sonnet-4-20250514', 'name': 'Claude Sonnet 4.5', 'recommended': True},
+                    {'id': 'claude-3-5-sonnet-20241022', 'name': 'Claude 3.5 Sonnet', 'recommended': False}
+                ]
+            }
+        }
         return Response(content=json.dumps(settings, ensure_ascii=True), media_type="application/json")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/settings/api-key")
-async def save_api_key(request: APIKeyRequest):
-    """Save and validate an API key"""
+@app.post("/api/validate-key")
+async def validate_api_key(request: APIKeyRequest):
+    """Validate an API key without storing it (keys stored in browser localStorage)"""
     try:
-        settings_manager = SettingsManager()
-        result = settings_manager.save_api_key(
-            provider=request.provider,
-            api_key=request.api_key,
-            validate=request.validate
-        )
-
-        if result['success']:
-            return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
-        else:
-            raise HTTPException(status_code=400, detail=result['message'])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/settings/provider")
-async def update_provider(request: ProviderRequest):
-    """Update the active LLM provider"""
-    try:
-        settings_manager = SettingsManager()
-        result = settings_manager.update_provider(
-            provider=request.provider,
-            model=request.model
-        )
-
-        if result['success']:
-            return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
-        else:
-            raise HTTPException(status_code=400, detail=result['message'])
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/settings/api-key/{provider}")
-async def delete_api_key(provider: str):
-    """Delete an API key"""
-    try:
-        settings_manager = SettingsManager()
-        result = settings_manager.delete_api_key(provider)
-
-        if result['success']:
-            return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
-        else:
-            raise HTTPException(status_code=400, detail=result['message'])
-    except HTTPException:
-        raise
+        provider = request.provider
+        api_key = request.api_key
+        
+        if not api_key or not api_key.strip():
+            return Response(
+                content=json.dumps({'valid': False, 'message': 'API key cannot be empty'}, ensure_ascii=True),
+                media_type="application/json"
+            )
+        
+        # Test the API key
+        try:
+            if provider == 'anthropic':
+                import anthropic
+                client = anthropic.Anthropic(api_key=api_key)
+                client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=10,
+                    messages=[{"role": "user", "content": "Hi"}]
+                )
+                
+            elif provider == 'cohere':
+                import cohere
+                client = cohere.ClientV2(api_key=api_key)
+                client.chat(
+                    model="command-a-03-2025",
+                    messages=[{"role": "user", "content": "Hi"}],
+                    max_tokens=10
+                )
+                
+            elif provider == 'groq':
+                from groq import Groq
+                client = Groq(api_key=api_key)
+                client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[{"role": "user", "content": "Hi"}],
+                    max_tokens=10
+                )
+            else:
+                return Response(
+                    content=json.dumps({'valid': False, 'message': f'Unknown provider: {provider}'}, ensure_ascii=True),
+                    media_type="application/json"
+                )
+            
+            return Response(
+                content=json.dumps({'valid': True, 'message': 'API key is valid!'}, ensure_ascii=True),
+                media_type="application/json"
+            )
+            
+        except Exception as e:
+            error_msg = str(e)
+            if '401' in error_msg or 'unauthorized' in error_msg.lower() or 'invalid' in error_msg.lower():
+                return Response(
+                    content=json.dumps({'valid': False, 'message': 'Invalid API key'}, ensure_ascii=True),
+                    media_type="application/json"
+                )
+            elif '429' in error_msg or 'rate limit' in error_msg.lower():
+                return Response(
+                    content=json.dumps({'valid': True, 'message': 'API key valid (rate limited but working)'}, ensure_ascii=True),
+                    media_type="application/json"
+                )
+            else:
+                return Response(
+                    content=json.dumps({'valid': False, 'message': f'Validation error: {error_msg[:100]}'}, ensure_ascii=True),
+                    media_type="application/json"
+                )
+                
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -266,8 +354,12 @@ async def populate_summaries(request: PopulateRequest):
                 media_type="application/json"
             )
         
-        # Initialize summarizer
-        summarizer = AIContentSummarizer()
+        # Initialize summarizer with user-provided settings
+        summarizer = AIContentSummarizer(
+            provider=request.llm_provider,
+            api_key=request.api_key,
+            model=request.llm_model
+        )
         
         # If force_refresh, regenerate all summaries
         if request.force_refresh:

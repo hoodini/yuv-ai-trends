@@ -2,26 +2,27 @@
 
 import os
 import time
-from typing import Dict, List
+from typing import Dict, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from cache_manager import CacheManager
 from local_llm import LocalLLMFallback
 
 
 class AIContentSummarizer:
-    """Generate summaries and trending explanations using Claude or Cohere API"""
+    """Generate summaries and trending explanations using various AI providers"""
     
-    def __init__(self, api_key: str = None, provider: str = None):
+    def __init__(self, api_key: str = None, provider: str = None, model: str = None):
         """
         Initialize with AI API key
         
         Args:
-            api_key: Optional API key (will auto-detect from environment if not provided)
-            provider: Optional provider name ('anthropic' or 'cohere'). Auto-detects if not provided.
+            api_key: Optional API key (can be passed per-request for user-provided keys)
+            provider: Optional provider name ('anthropic', 'cohere', 'groq', or 'local_wasm')
+            model: Optional model name to use
         """
-        # Auto-detect provider and API key
         self.provider = provider
         self.api_key = api_key
+        self.model = model
         self.client = None
         
         # Initialize cache manager
@@ -30,48 +31,41 @@ class AIContentSummarizer:
         # Initialize local LLM fallback
         self.local_llm = LocalLLMFallback()
 
+        # Determine provider
         if not self.provider:
-            # Check which API key is available, prefer setting from LLM_PROVIDER env var
-            provider_pref = os.environ.get("LLM_PROVIDER", "").lower()
+            provider_pref = os.environ.get("LLM_PROVIDER", "local_wasm").lower()
             if provider_pref in ["anthropic", "cohere", "groq", "local_wasm"]:
                 self.provider = provider_pref
-            elif os.environ.get("COHERE_API_KEY"):
-                self.provider = "cohere"
-            elif os.environ.get("ANTHROPIC_API_KEY"):
-                self.provider = "anthropic"
-            elif os.environ.get("GROQ_API_KEY"):
-                self.provider = "groq"
             else:
                 self.provider = "local_wasm"
-                print("No API keys found, using local LLM fallback")
 
         # Initialize the appropriate client
-        if self.provider == "cohere":
-            import cohere
-            self.api_key = self.api_key or os.environ.get("COHERE_API_KEY")
-            if not self.api_key:
-                raise ValueError("COHERE_API_KEY not found. Please set it in environment variables.")
-            self.client = cohere.ClientV2(api_key=self.api_key)
-            print(f"Using Cohere API for AI summaries")
-        elif self.provider == "anthropic":
-            import anthropic
-            self.api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
-            if not self.api_key:
-                raise ValueError("ANTHROPIC_API_KEY not found. Please set it in environment variables.")
-            self.client = anthropic.Anthropic(api_key=self.api_key)
-            print(f"Using Anthropic Claude API for AI summaries")
-        elif self.provider == "groq":
-            from groq import Groq
-            self.api_key = self.api_key or os.environ.get("GROQ_API_KEY")
-            if not self.api_key:
-                raise ValueError("GROQ_API_KEY not found. Please set it in environment variables.")
-            self.client = Groq(api_key=self.api_key)
-            print(f"Using Groq API for AI summaries")
-        elif self.provider == "local_wasm":
+        self._init_client()
+    
+    def _init_client(self):
+        """Initialize the AI client based on provider and API key"""
+        if self.provider == "local_wasm" or not self.api_key:
+            # Use local LLM - no client needed
             self.client = None
-            print(f"Using Local LLM for AI summaries (WebLLM mode)")
-        else:
-            raise ValueError(f"Unknown provider: {self.provider}. Use 'anthropic', 'cohere', 'groq', or 'local_wasm'.")
+            if self.provider != "local_wasm" and not self.api_key:
+                print(f"No API key provided for {self.provider}, falling back to local LLM")
+                self.provider = "local_wasm"
+            return
+            
+        try:
+            if self.provider == "cohere":
+                import cohere
+                self.client = cohere.ClientV2(api_key=self.api_key)
+            elif self.provider == "anthropic":
+                import anthropic
+                self.client = anthropic.Anthropic(api_key=self.api_key)
+            elif self.provider == "groq":
+                from groq import Groq
+                self.client = Groq(api_key=self.api_key)
+        except Exception as e:
+            print(f"Failed to initialize {self.provider} client: {e}")
+            self.provider = "local_wasm"
+            self.client = None
     
     def generate_summary_and_explanation(self, item: Dict, force_refresh: bool = False) -> Dict:
         """
@@ -152,13 +146,9 @@ HOW: [approach/methodology]"""
                 self.cache.set_summary(item, result)
                 return result
             
-            # Get model from environment or use default
-            model = os.environ.get("LLM_MODEL", "")
-
             if self.provider == "cohere":
                 # Use Cohere API
-                if not model:
-                    model = "command-a-03-2025"
+                model = self.model or "command-a-03-2025"
                 response = self.client.chat(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
@@ -167,8 +157,7 @@ HOW: [approach/methodology]"""
                 response_text = response.message.content[0].text
             elif self.provider == "anthropic":
                 # Use Anthropic API
-                if not model:
-                    model = "claude-sonnet-4-20250514"
+                model = self.model or "claude-sonnet-4-20250514"
                 message = self.client.messages.create(
                     model=model,
                     max_tokens=300,
@@ -179,8 +168,7 @@ HOW: [approach/methodology]"""
                 response_text = message.content[0].text
             elif self.provider == "groq":
                 # Use Groq API
-                if not model:
-                    model = "llama-3.3-70b-versatile"
+                model = self.model or "llama-3.3-70b-versatile"
                 completion = self.client.chat.completions.create(
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
