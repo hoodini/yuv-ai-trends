@@ -316,10 +316,24 @@ class HuggingFaceFetcher:
             spaces = []
             
             for space_info in spaces_list:
-                # Get description from card data if available
+                # Get description from various sources
                 description = ""
+                
+                # Try card_data first
                 if hasattr(space_info, 'card_data') and space_info.card_data:
-                    description = space_info.card_data.get('title', '')
+                    description = (
+                        space_info.card_data.get('short_description') or
+                        space_info.card_data.get('description') or
+                        space_info.card_data.get('title') or
+                        ''
+                    )
+                
+                # If still empty, construct from space ID
+                if not description and space_info.id:
+                    owner = space_info.id.split('/')[0] if '/' in space_info.id else ''
+                    sdk_info = f" ({space_info.sdk})" if hasattr(space_info, 'sdk') and space_info.sdk else ""
+                    if owner:
+                        description = f"Interactive AI demo{sdk_info} by {owner}"
                 
                 # Get creation date
                 created_at = ""

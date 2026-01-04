@@ -798,6 +798,29 @@ async def get_rss_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/rss/clear")
+@app.post("/api/rss/clear")
+async def clear_rss_store():
+    """
+    Clear all items from the RSS store.
+    Use this to reset the store after code changes or to start fresh.
+    """
+    try:
+        store = get_rss_store()
+        old_count = len(store.items)
+        store.clear()
+        return Response(
+            content=json.dumps({
+                'success': True,
+                'cleared_items': old_count,
+                'message': f'Cleared {old_count} items from RSS store'
+            }, ensure_ascii=True),
+            media_type="application/json"
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/feed.json")
 @app.get("/feed.json")
 async def get_json_feed(
