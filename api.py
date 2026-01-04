@@ -6,6 +6,9 @@ import sys
 import io
 import json
 import os
+from datetime import datetime, timezone
+from xml.etree.ElementTree import Element, SubElement, tostring
+from xml.dom import minidom
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -420,6 +423,158 @@ async def check_summaries(request: PopulateRequest):
         
         return Response(content=json.dumps(result, ensure_ascii=True), media_type="application/json")
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+def generate_rss_xml(items: List[Dict], title: str, description: str, link: str) -> str:
+    """Generate RSS 2.0 XML from news items"""
+    rss = Element('rss', version='2.0')
+    rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
+    
+    channel = SubElement(rss, 'channel')
+    
+    # Channel metadata
+    SubElement(channel, 'title').text = title
+    SubElement(channel, 'description').text = description
+    SubElement(channel, 'link').text = link
+    SubElement(channel, 'language').text = 'en-us'
+    SubElement(channel, 'lastBuildDate').text = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
+    SubElement(channel, 'generator').text = 'YUV AI Trends'
+    
+    # Atom self link
+    atom_link = SubElement(channel, 'atom:link')
+    atom_link.set('href', f'{link}/rss.xml')
+    atom_link.set('rel', 'self')
+    atom_link.set('type', 'application/rss+xml')
+    
+    # Add items
+    for item in items[:50]:  # Limit to 50 items
+        entry = SubElement(channel, 'item')
+        
+        # Title
+        item_title = item.get('name') or item.get('title') or 'Untitled'
+        SubElement(entry, 'title').text = item_title
+        
+        # Link
+        item_link = item.get('url') or item.get('html_url') or ''
+        SubElement(entry, 'link').text = item_link
+        
+        # GUID
+        guid = SubElement(entry, 'guid')
+        guid.text = item_link
+        guid.set('isPermaLink', 'true')
+        
+        # Description
+        desc_parts = []
+        if item.get('ai_summary'):
+            desc_parts.append(f"<p><strong>AI Summary:</strong> {item['ai_summary']}</p>")
+        if item.get('description'):
+            desc_parts.append(f"<p>{item['description']}</p>")
+        
+        # Add metadata
+        meta = []
+        if item.get('stars'):
+            meta.append(f"⭐ {item['stars']:,} stars")
+        if item.get('forks'):
+            meta.append(f"🍴 {item['forks']:,} forks")
+        if item.get('language'):
+            meta.append(f"💻 {item['language']}")
+        if item.get('upvotes'):
+            meta.append(f"👍 {item['upvotes']} upvotes")
+        if item.get('likes'):
+            meta.append(f"❤️ {item['likes']} likes")
+        if meta:
+            desc_parts.append(f"<p>{' | '.join(meta)}</p>")
+        
+        # Source badge
+        source = item.get('source', 'unknown')
+        desc_parts.append(f"<p><em>Source: {source}</em></p>")
+        
+        SubElement(entry, 'description').text = ''.join(desc_parts) if desc_parts else item_title
+        
+        # Category/Source
+        SubElement(entry, 'category').text = source
+        
+        # Pub date (use current time if not available)
+        SubElement(entry, 'pubDate').text = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
+    
+    # Pretty print XML
+    xml_str = tostring(rss, encoding='unicode')
+    return f'<?xml version="1.0" encoding="UTF-8"?>\n{xml_str}'
+
+
+@app.get("/rss.xml")
+@app.get("/api/rss")
+@app.get("/feed")
+async def get_rss_feed(time_range: str = "daily", limit: int = 30):
+    """Generate RSS feed of trending AI/ML content"""
+    try:
+        # Initialize fetchers
+        github_trending = GitHubTrendingFetcher()
+        github_explore = GitHubExploreFetcher()
+        hf_fetcher = HuggingFaceFetcher()
+        ranker = ContentRanker()
+        
+        time_range_days = config.TIME_RANGES.get(time_range, 1)
+        all_items = []
+        
+        # Fetch from all sources (without AI summaries for speed)
+        try:
+            gh_time_range = time_range if time_range in ['daily', 'weekly', 'monthly'] else 'daily'
+            github_repos = github_trending.fetch_all_languages(since=gh_time_range)
+            github_repos = [sanitize_dict(repo) for repo in github_repos]
+            all_items.extend(github_repos)
+        except Exception:
+            pass
+        
+        try:
+            collections = github_explore.fetch_collections()
+            collections = [sanitize_dict(c) for c in collections]
+            all_items.extend(collections)
+        except Exception:
+            pass
+        
+        try:
+            papers = hf_fetcher.fetch_papers(limit=20)
+            papers = [sanitize_dict(p) for p in papers]
+            all_items.extend(papers)
+        except Exception:
+            pass
+        
+        try:
+            spaces = hf_fetcher.fetch_trending_spaces(limit=15)
+            spaces = [sanitize_dict(s) for s in spaces]
+            all_items.extend(spaces)
+        except Exception:
+            pass
+        
+        if not all_items:
+            # Return empty feed
+            rss_xml = generate_rss_xml([], "YUV AI Trends", "No items available", "https://trends.yuv.ai")
+            return Response(content=rss_xml, media_type="application/rss+xml")
+        
+        # Rank and get top items
+        ranked_items = ranker.rank_items(all_items, days_range=time_range_days)
+        top_items = ranker.get_top_items(ranked_items, limit=limit)
+        
+        # Generate RSS
+        rss_xml = generate_rss_xml(
+            top_items,
+            title="YUV AI Trends",
+            description="Curated AI & ML trends from GitHub, Hugging Face, and more. Updated daily.",
+            link="https://trends.yuv.ai"
+        )
+        
+        return Response(
+            content=rss_xml,
+            media_type="application/rss+xml",
+            headers={
+                "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
+            }
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

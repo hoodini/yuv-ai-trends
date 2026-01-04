@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Cpu, Activity, Wifi, Settings } from 'lucide-react';
+import { Cpu, Activity, Wifi, Settings, Rss } from 'lucide-react';
 import { motion } from 'framer-motion';
 import SettingsModal from './Settings';
+import { API_URL } from '../App';
 
 const Header = () => {
     const [settingsOpen, setSettingsOpen] = useState(false);
@@ -56,6 +57,18 @@ const Header = () => {
                     </div>
 
                     <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
+
+                    <motion.a
+                        href={`${API_URL}/rss.xml`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="p-2 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 transition-colors group"
+                        title="RSS Feed"
+                    >
+                        <Rss className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-all duration-300" />
+                    </motion.a>
 
                     <motion.button
                         whileHover={{ scale: 1.05 }}
