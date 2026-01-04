@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SettingsModal from './Settings';
 import { API_URL } from '../App';
 
-// RSS Feed URL - uses custom domain in production
-const RSS_URL = import.meta.env.PROD ? 'https://api.yuv.ai/rss.xml' : `${API_URL}/rss.xml`;
+// RSS Feed URL
+const RSS_URL = `${API_URL}/rss.xml`;
 
 const Header = () => {
     const [settingsOpen, setSettingsOpen] = useState(false);
