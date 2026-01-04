@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Key, Settings as SettingsIcon, Check, AlertCircle, Eye, EyeOff, Trash2, ExternalLink, Zap } from 'lucide-react';
+import { X, Key, Settings as SettingsIcon, Check, AlertCircle, Eye, EyeOff, Trash2, ExternalLink, Zap, Download, HardDrive } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../App';
 
@@ -8,7 +8,35 @@ import { API_URL } from '../App';
 const STORAGE_KEYS = {
     PROVIDER: 'yuv_ai_provider',
     MODEL: 'yuv_ai_model',
-    API_KEYS: 'yuv_ai_keys'
+    API_KEYS: 'yuv_ai_keys',
+    WEBLLM_MODELS: 'yuv_webllm_downloaded'
+};
+
+// Provider info - client-side source of truth for which providers need keys
+const PROVIDER_INFO = {
+    local_wasm: {
+        name: 'Local WASM (Browser)',
+        description: 'Privacy focused, runs entirely in your browser (coming soon)',
+        requiresKey: false
+    },
+    groq: {
+        name: 'Groq',
+        description: 'Ultra fast inference with LPU technology',
+        requiresKey: true,
+        keyUrl: 'https://console.groq.com/keys'
+    },
+    cohere: {
+        name: 'Cohere',
+        description: 'Fast and accurate with Command A models',
+        requiresKey: true,
+        keyUrl: 'https://dashboard.cohere.com/api-keys'
+    },
+    anthropic: {
+        name: 'Anthropic Claude',
+        description: 'High quality AI summaries with Claude Sonnet 4.5',
+        requiresKey: true,
+        keyUrl: 'https://console.anthropic.com/settings/keys'
+    }
 };
 
 // Helper functions for localStorage
@@ -17,10 +45,11 @@ export const getStoredSettings = () => {
         return {
             provider: localStorage.getItem(STORAGE_KEYS.PROVIDER) || 'local_wasm',
             model: localStorage.getItem(STORAGE_KEYS.MODEL) || '',
-            apiKeys: JSON.parse(localStorage.getItem(STORAGE_KEYS.API_KEYS) || '{}')
+            apiKeys: JSON.parse(localStorage.getItem(STORAGE_KEYS.API_KEYS) || '{}'),
+            downloadedModels: JSON.parse(localStorage.getItem(STORAGE_KEYS.WEBLLM_MODELS) || '[]')
         };
     } catch {
-        return { provider: 'local_wasm', model: '', apiKeys: {} };
+        return { provider: 'local_wasm', model: '', apiKeys: {}, downloadedModels: [] };
     }
 };
 
@@ -29,6 +58,7 @@ export const saveStoredSettings = (settings) => {
         if (settings.provider) localStorage.setItem(STORAGE_KEYS.PROVIDER, settings.provider);
         if (settings.model !== undefined) localStorage.setItem(STORAGE_KEYS.MODEL, settings.model);
         if (settings.apiKeys) localStorage.setItem(STORAGE_KEYS.API_KEYS, JSON.stringify(settings.apiKeys));
+        if (settings.downloadedModels) localStorage.setItem(STORAGE_KEYS.WEBLLM_MODELS, JSON.stringify(settings.downloadedModels));
     } catch (e) {
         console.error('Failed to save settings:', e);
     }
@@ -37,6 +67,15 @@ export const saveStoredSettings = (settings) => {
 export const getApiKeyForProvider = (provider) => {
     const settings = getStoredSettings();
     return settings.apiKeys[provider] || '';
+};
+
+// Check if a provider can be used (has key if required)
+export const canUseProvider = (provider) => {
+    const info = PROVIDER_INFO[provider];
+    if (!info) return false;
+    if (!info.requiresKey) return true;
+    const key = getApiKeyForProvider(provider);
+    return !!key && key.trim().length > 0;
 };
 
 const Settings = ({ isOpen, onClose }) => {
@@ -133,9 +172,10 @@ const Settings = ({ isOpen, onClose }) => {
     const handleSaveProvider = () => {
         const stored = getStoredSettings();
         
-        const providerInfo = serverSettings?.available_providers?.[selectedProvider];
+        // Use client-side PROVIDER_INFO for validation
+        const providerInfo = PROVIDER_INFO[selectedProvider];
         if (providerInfo?.requiresKey && !stored.apiKeys[selectedProvider]) {
-            setErrors({ provider: `Please add an API key for ${providerInfo.name} first` });
+            setErrors({ provider: `Please add an API key for ${providerInfo.name} first (go to API Keys tab)` });
             return;
         }
         
@@ -262,9 +302,11 @@ const Settings = ({ isOpen, onClose }) => {
 };
 
 const ProvidersTab = ({ serverSettings, selectedProvider, setSelectedProvider, selectedModel, setSelectedModel, onSave, hasStoredKey, error, success }) => {
-    const providers = serverSettings?.available_providers || {};
     const models = serverSettings?.models || {};
     const storedSettings = getStoredSettings();
+
+    // Use client-side PROVIDER_INFO as source of truth
+    const providers = PROVIDER_INFO;
 
     return (
         <div className="space-y-6">
@@ -279,6 +321,7 @@ const ProvidersTab = ({ serverSettings, selectedProvider, setSelectedProvider, s
                         const needsKey = provider.requiresKey;
                         const hasKey = hasStoredKey(key);
                         const isActive = storedSettings.provider === key;
+                        const canUse = !needsKey || hasKey;
 
                         return (
                             <motion.button
@@ -287,7 +330,8 @@ const ProvidersTab = ({ serverSettings, selectedProvider, setSelectedProvider, s
                                 whileTap={{ scale: 0.98 }}
                                 onClick={() => {
                                     setSelectedProvider(key);
-                                    const defaultModel = models[key]?.find(m => m.recommended)?.id || models[key]?.[0]?.id || '';
+                                    const providerModels = models[key] || [];
+                                    const defaultModel = providerModels.find(m => m.recommended)?.id || providerModels[0]?.id || '';
                                     setSelectedModel(defaultModel);
                                 }}
                                 className={`p-4 rounded-xl border text-left transition-all relative ${
@@ -315,11 +359,11 @@ const ProvidersTab = ({ serverSettings, selectedProvider, setSelectedProvider, s
                                         </span>
                                     ) : hasKey ? (
                                         <span className="text-xs px-2 py-1 rounded bg-green-500/20 text-green-400">
-                                            KEY SAVED
+                                            KEY SAVED ✓
                                         </span>
                                     ) : (
-                                        <span className="text-xs px-2 py-1 rounded bg-yellow-500/20 text-yellow-400">
-                                            NEEDS API KEY
+                                        <span className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400">
+                                            REQUIRES API KEY
                                         </span>
                                     )}
                                 </div>
@@ -387,8 +431,7 @@ const ProvidersTab = ({ serverSettings, selectedProvider, setSelectedProvider, s
 };
 
 const ApiKeysTab = ({ serverSettings, apiKeys, setApiKeys, showKeys, setShowKeys, validating, errors, success, onValidate, onDelete, hasStoredKey }) => {
-    const providers = serverSettings?.available_providers || {};
-
+    // Use client-side PROVIDER_INFO
     const providerConfigs = [
         { key: 'groq', placeholder: 'gsk_...' },
         { key: 'cohere', placeholder: 'your-cohere-api-key' },
@@ -400,12 +443,12 @@ const ApiKeysTab = ({ serverSettings, apiKeys, setApiKeys, showKeys, setShowKeys
             <div>
                 <h3 className="text-lg font-bold text-white mb-2">Your API Keys</h3>
                 <p className="text-sm text-muted-foreground mb-6">
-                    Add API keys to use premium AI providers. Keys are stored securely in your browser only.
+                    Add API keys to use cloud AI providers. Keys are stored securely in your browser only.
                 </p>
             </div>
 
             {providerConfigs.map((config) => {
-                const provider = providers[config.key];
+                const provider = PROVIDER_INFO[config.key];
                 if (!provider) return null;
                 
                 const hasKey = hasStoredKey(config.key);
@@ -419,7 +462,11 @@ const ApiKeysTab = ({ serverSettings, apiKeys, setApiKeys, showKeys, setShowKeys
                                     {provider.name}
                                 </h4>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    {hasKey ? '✓ API key saved in browser' : 'No API key configured'}
+                                    {hasKey ? (
+                                        <span className="text-green-400">✓ API key saved in browser</span>
+                                    ) : (
+                                        <span className="text-red-400">✗ No API key configured</span>
+                                    )}
                                 </p>
                             </div>
                             <div className="flex items-center gap-2">
@@ -491,11 +538,14 @@ const ApiKeysTab = ({ serverSettings, apiKeys, setApiKeys, showKeys, setShowKeys
 
             <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
                 <h4 className="font-bold text-blue-400 mb-2 text-sm flex items-center gap-2">
-                    <Zap className="w-4 h-4" />
-                    Free Option: Local Web LLM
+                    <HardDrive className="w-4 h-4" />
+                    Free Option: Local WASM LLM
                 </h4>
-                <p className="text-xs text-muted-foreground">
-                    Don't want to use API keys? The built-in Local Web LLM generates summaries without any external services - completely free and private!
+                <p className="text-xs text-muted-foreground mb-2">
+                    Don't want to use API keys? The Local WASM option runs AI models directly in your browser - completely free and private!
+                </p>
+                <p className="text-xs text-yellow-400">
+                    ⚠️ Note: Local WASM models require downloading ~2-4GB on first use. Models are cached in your browser for future visits.
                 </p>
             </div>
         </div>
