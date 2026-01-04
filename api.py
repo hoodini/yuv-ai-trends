@@ -473,15 +473,15 @@ def generate_rss_xml(items: List[Dict], title: str, description: str, link: str)
         # Add metadata
         meta = []
         if item.get('stars'):
-            meta.append(f"⭐ {item['stars']:,} stars")
+            meta.append(f"Stars: {item['stars']:,}")
         if item.get('forks'):
-            meta.append(f"🍴 {item['forks']:,} forks")
+            meta.append(f"Forks: {item['forks']:,}")
         if item.get('language'):
-            meta.append(f"💻 {item['language']}")
+            meta.append(f"Lang: {item['language']}")
         if item.get('upvotes'):
-            meta.append(f"👍 {item['upvotes']} upvotes")
+            meta.append(f"Upvotes: {item['upvotes']}")
         if item.get('likes'):
-            meta.append(f"❤️ {item['likes']} likes")
+            meta.append(f"Likes: {item['likes']}")
         if meta:
             desc_parts.append(f"<p>{' | '.join(meta)}</p>")
         
