@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { Cpu, Activity, Wifi, Settings, Rss } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Cpu, Activity, Wifi, Settings, Rss, Menu, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import SettingsModal from './Settings';
 import { API_URL } from '../App';
 
+// RSS Feed URL - uses custom domain in production
+const RSS_URL = import.meta.env.PROD ? 'https://api.yuv.ai/rss.xml' : `${API_URL}/rss.xml`;
+
 const Header = () => {
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     return (
         <>
@@ -38,7 +42,28 @@ const Header = () => {
                     </div>
                 </div>
 
-                {/* HUD Elements */}
+                {/* Mobile Menu Button */}
+                <div className="flex md:hidden items-center gap-2">
+                    <motion.a
+                        href={RSS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        whileTap={{ scale: 0.95 }}
+                        className="p-2 rounded-lg border border-orange-500/30 bg-orange-500/10"
+                        title="RSS Feed"
+                    >
+                        <Rss className="w-5 h-5 text-orange-400" />
+                    </motion.a>
+                    <motion.button
+                        whileTap={{ scale: 0.95 }}
+                        onClick={() => setSettingsOpen(true)}
+                        className="p-2 rounded-lg border border-white/10 bg-white/5"
+                    >
+                        <Settings className="w-5 h-5 text-muted-foreground" />
+                    </motion.button>
+                </div>
+
+                {/* HUD Elements - Desktop */}
                 <div className="hidden md:flex items-center gap-8">
                     <div className="flex items-center gap-3 font-mono text-xs text-muted-foreground">
                         <Activity className="w-4 h-4 text-secondary animate-pulse" />
@@ -59,15 +84,16 @@ const Header = () => {
                     <div className="h-8 w-px bg-gradient-to-b from-transparent via-white/20 to-transparent"></div>
 
                     <motion.a
-                        href={`${API_URL}/rss.xml`}
+                        href={RSS_URL}
                         target="_blank"
                         rel="noopener noreferrer"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
-                        className="p-2 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 transition-colors group"
-                        title="RSS Feed"
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 transition-colors group"
+                        title="Subscribe via RSS"
                     >
-                        <Rss className="w-5 h-5 text-orange-400 group-hover:text-orange-300 transition-all duration-300" />
+                        <Rss className="w-4 h-4 text-orange-400 group-hover:text-orange-300 transition-all duration-300" />
+                        <span className="text-xs font-mono text-orange-400 group-hover:text-orange-300">RSS</span>
                     </motion.a>
 
                     <motion.button
