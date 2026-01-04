@@ -7,9 +7,7 @@ import NewsFeed from './components/NewsFeed';
 import LoadingState from './components/LoadingState';
 import TopHighlights from './components/TopHighlights';
 import { getStoredSettings, getApiKeyForProvider } from './components/Settings';
-
-// API URL - configurable for production deployment
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { API_URL } from './config';
 
 // Helper to get LLM config from localStorage
 const getLLMConfig = () => {

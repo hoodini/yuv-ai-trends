@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Cpu, Activity, Wifi, Settings, Rss, Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import SettingsModal from './Settings';
-import { API_URL } from '../App';
+import { API_URL } from '../config';
 
 // RSS Feed URL
 const RSS_URL = `${API_URL}/rss.xml`;

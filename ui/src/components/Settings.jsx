@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Key, Settings as SettingsIcon, Check, AlertCircle, Eye, EyeOff, Trash2, ExternalLink, Zap, Download, HardDrive } from 'lucide-react';
 import axios from 'axios';
-import { API_URL } from '../App';
+import { API_URL } from '../config';
 
 // LocalStorage keys
 const STORAGE_KEYS = {
