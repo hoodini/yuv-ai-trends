@@ -6,11 +6,12 @@ services:
     name: yuv-ai-trends-api
     runtime: python
     plan: free
+    region: oregon
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/settings
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.0"
       - key: ALLOWED_ORIGINS
         value: "https://trends.yuv.ai,https://hoodini.github.io"
-    healthCheckPath: /api/settings
