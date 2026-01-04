@@ -81,30 +81,11 @@ class RSSStore:
         return f"urn:yuv-ai:{hashlib.sha256(content.encode()).hexdigest()[:16]}"
     
     def _format_description(self, item: Dict) -> str:
-        """Format description for Make.com consumption - clean text"""
-        parts = []
-        
-        # Primary description
-        if item.get('description'):
-            parts.append(item['description'].strip())
-        
-        # Technical details (optional, for enrichment)
-        meta = []
-        if item.get('language'):
-            meta.append(f"Language: {item['language']}")
-        if item.get('stars'):
-            meta.append(f"Stars: {item['stars']:,}")
-        if item.get('forks'):
-            meta.append(f"Forks: {item['forks']:,}")
-        if item.get('upvotes'):
-            meta.append(f"Upvotes: {item['upvotes']}")
-        if item.get('likes'):
-            meta.append(f"Likes: {item['likes']}")
-        
-        if meta:
-            parts.append(f"[{' | '.join(meta)}]")
-        
-        return ' '.join(parts) if parts else 'No description available'
+        """Format description for Make.com consumption - clean text only"""
+        # Return ONLY the description text, no metadata
+        # Make.com template needs clean description for content generation
+        desc = item.get('description', '').strip()
+        return desc if desc else 'No description available'
     
     def add_items(self, items: List[Dict], digest_type: str = "daily") -> List[Dict]:
         """
@@ -125,20 +106,28 @@ class RSSStore:
             
             if guid not in self.items:
                 # This is a NEW item
+                # Extract clean repo name (without owner for cleaner titles)
+                full_name = item.get('name') or item.get('title') or 'Untitled'
+                
                 stored_item = {
                     'guid': guid,
-                    'title': item.get('name') or item.get('title') or 'Untitled',
+                    'title': full_name,  # Full name like "owner/repo"
                     'url': item.get('url') or item.get('html_url') or '',
                     'description': self._format_description(item),
                     'source': item.get('source', 'unknown'),
                     'digest_type': digest_type,
                     'discovered_at': now.isoformat(),
                     'score': item.get('score', 0),
-                    # Preserve original data for reference
+                    # Additional fields for Make.com template
                     'stars': item.get('stars'),
                     'forks': item.get('forks'),
                     'language': item.get('language'),
+                    'likes': item.get('likes'),
+                    'upvotes': item.get('upvotes'),
                     'ai_summary': item.get('ai_summary'),
+                    # Extracted repo name without owner (useful for slugs)
+                    'repo_name': full_name.split('/')[-1] if '/' in full_name else full_name,
+                    'owner': full_name.split('/')[0] if '/' in full_name else '',
                 }
                 
                 self.items[guid] = stored_item

@@ -78,6 +78,28 @@ class PopulateRequest(BaseModel):
     llm_model: Optional[str] = None
     api_key: Optional[str] = None
 
+
+# ============================================================================
+# HEALTH & KEEP-ALIVE ENDPOINTS (for Render free tier)
+# ============================================================================
+
+@app.get("/")
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    """
+    Lightweight health check endpoint for keep-alive pings.
+    Use this with UptimeRobot, cron-job.org, or similar to prevent Render sleep.
+    """
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/ping")
+async def ping():
+    """Ultra-lightweight ping for monitoring"""
+    return "pong"
+
+
 @app.post("/api/generate")
 async def generate_news(request: GenerateRequest):
     try:
@@ -437,17 +459,21 @@ def generate_rss_xml(
     """
     Generate RSS 2.0 XML from stored items
     
-    Items are expected to have:
-    - guid: unique identifier
-    - title: item title (repo name)
-    - url: link to the item
-    - description: clean text description
-    - discovered_at: ISO timestamp when first seen
-    - source: github_trending, hf_papers, etc.
-    - digest_type: daily, weekly, monthly
+    Make.com field mapping:
+    - {{1.title}}       → Repository name (e.g., "owner/repo")
+    - {{1.url}}         → Full URL (from <link>)  
+    - {{1.description}} → Clean description text
+    - {{1.source}}      → Source category (github_trending, hf_papers, etc)
+    - {{1.pubDate}}     → Discovery timestamp
+    
+    Custom yuv: namespace fields (accessible in Make.com via content parsing):
+    - yuv:stars, yuv:forks, yuv:language, yuv:likes
+    - yuv:repoName (just the repo name without owner)
+    - yuv:owner (repository owner)
     """
     rss = Element('rss', version='2.0')
     rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
+    rss.set('xmlns:yuv', 'https://yuv.ai/rss')  # Custom namespace for extra fields
     
     channel = SubElement(rss, 'channel')
     
@@ -477,10 +503,12 @@ def generate_rss_xml(
     for item in items[:50]:
         entry = SubElement(channel, 'item')
         
-        # Title - This maps to {{1.title}} in Make.com
+        # === CORE RSS FIELDS (Make.com maps these automatically) ===
+        
+        # Title - {{1.title}} in Make.com
         SubElement(entry, 'title').text = item.get('title', 'Untitled')
         
-        # Link - This maps to {{1.url}} in Make.com
+        # Link - {{1.url}} in Make.com
         SubElement(entry, 'link').text = item.get('url', '')
         
         # GUID - Unique identifier for Make.com to track new items
@@ -488,18 +516,17 @@ def generate_rss_xml(
         guid.text = item.get('guid') or item.get('url', '')
         guid.set('isPermaLink', 'true' if item.get('url') else 'false')
         
-        # Description - This maps to {{1.description}} in Make.com
-        # Keep it clean text for easy processing
+        # Description - {{1.description}} in Make.com
         SubElement(entry, 'description').text = item.get('description', '')
         
-        # Category for source
-        SubElement(entry, 'category').text = item.get('source', 'unknown')
+        # Source category
+        source = item.get('source', 'unknown')
+        SubElement(entry, 'category').text = source
         
-        # Second category for digest type
+        # Digest type category
         SubElement(entry, 'category').text = f"digest:{item.get('digest_type', digest_type)}"
         
-        # PubDate - CRITICAL: Use the actual discovery time, not "now"
-        # This is how Make.com detects NEW items
+        # PubDate - CRITICAL: Use the actual discovery time
         discovered_at = item.get('discovered_at')
         if discovered_at:
             try:
@@ -511,6 +538,31 @@ def generate_rss_xml(
             pub_date = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
         
         SubElement(entry, 'pubDate').text = pub_date
+        
+        # === CUSTOM YUV FIELDS (for Make.com content module parsing) ===
+        
+        # Repository metadata
+        if item.get('repo_name'):
+            SubElement(entry, 'yuv:repoName').text = item['repo_name']
+        if item.get('owner'):
+            SubElement(entry, 'yuv:owner').text = item['owner']
+        
+        # GitHub stats
+        if item.get('stars') is not None:
+            SubElement(entry, 'yuv:stars').text = str(item['stars'])
+        if item.get('forks') is not None:
+            SubElement(entry, 'yuv:forks').text = str(item['forks'])
+        if item.get('language'):
+            SubElement(entry, 'yuv:language').text = item['language']
+        
+        # HuggingFace stats
+        if item.get('likes') is not None:
+            SubElement(entry, 'yuv:likes').text = str(item['likes'])
+        if item.get('upvotes') is not None:
+            SubElement(entry, 'yuv:upvotes').text = str(item['upvotes'])
+        
+        # Source type
+        SubElement(entry, 'yuv:source').text = source
     
     # Pretty print XML
     xml_str = tostring(rss, encoding='unicode')
@@ -743,6 +795,131 @@ async def get_rss_stats():
             media_type="application/json"
         )
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/feed.json")
+@app.get("/feed.json")
+async def get_json_feed(
+    time_range: str = Query("daily", description="Digest type: daily, weekly, or monthly"),
+    limit: int = Query(30, description="Maximum items to return"),
+    refresh: bool = Query(False, description="Force fetch new items from sources")
+):
+    """
+    JSON Feed alternative to RSS for Make.com HTTP module.
+    
+    Returns items in a simple JSON format that's easier to parse:
+    {
+        "items": [
+            {
+                "title": "owner/repo",
+                "url": "https://github.com/...",
+                "description": "Clean description text",
+                "repo_name": "repo",
+                "owner": "owner",
+                "stars": 1234,
+                "forks": 567,
+                "language": "Python",
+                "source": "github_trending",
+                "discovered_at": "2026-01-04T15:00:00+00:00"
+            }
+        ],
+        "meta": {
+            "digest_type": "daily",
+            "total": 30,
+            "generated_at": "2026-01-04T15:30:00+00:00"
+        }
+    }
+    """
+    try:
+        store = get_rss_store()
+        
+        # Same refresh logic as RSS endpoint
+        should_fetch = refresh
+        existing_items = store.get_items(digest_type=time_range, limit=1)
+        
+        if not existing_items:
+            should_fetch = True
+        elif existing_items:
+            try:
+                newest = datetime.fromisoformat(
+                    existing_items[0]['discovered_at'].replace('Z', '+00:00')
+                )
+                threshold_hours = {'daily': 1, 'weekly': 6, 'monthly': 24}.get(time_range, 1)
+                if datetime.now(timezone.utc) - newest > timedelta(hours=threshold_hours):
+                    should_fetch = True
+            except (KeyError, ValueError):
+                should_fetch = True
+        
+        if should_fetch:
+            github_trending = GitHubTrendingFetcher()
+            github_explore = GitHubExploreFetcher()
+            hf_fetcher = HuggingFaceFetcher()
+            ranker = ContentRanker()
+            
+            time_range_days = config.TIME_RANGES.get(time_range, 1)
+            all_items = []
+            
+            try:
+                gh_time_range = time_range if time_range in ['daily', 'weekly', 'monthly'] else 'daily'
+                github_repos = github_trending.fetch_all_languages(since=gh_time_range)
+                github_repos = [sanitize_dict(repo) for repo in github_repos]
+                all_items.extend(github_repos)
+            except Exception:
+                pass
+            
+            try:
+                collections = github_explore.fetch_collections()
+                collections = [sanitize_dict(c) for c in collections]
+                all_items.extend(collections)
+            except Exception:
+                pass
+            
+            try:
+                papers = hf_fetcher.fetch_papers(limit=20)
+                papers = [sanitize_dict(p) for p in papers]
+                all_items.extend(papers)
+            except Exception:
+                pass
+            
+            try:
+                spaces = hf_fetcher.fetch_trending_spaces(limit=15)
+                spaces = [sanitize_dict(s) for s in spaces]
+                all_items.extend(spaces)
+            except Exception:
+                pass
+            
+            if all_items:
+                ranked_items = ranker.rank_items(all_items, days_range=time_range_days)
+                top_items = ranker.get_top_items(ranked_items, limit=50)
+                store.add_items(top_items, digest_type=time_range)
+        
+        # Get items from store
+        items = store.get_items(digest_type=time_range, limit=limit)
+        
+        # Format for JSON feed
+        result = {
+            "items": items,
+            "meta": {
+                "digest_type": time_range,
+                "total": len(items),
+                "generated_at": datetime.now(timezone.utc).isoformat()
+            }
+        }
+        
+        cache_seconds = {'daily': 3600, 'weekly': 21600, 'monthly': 86400}.get(time_range, 3600)
+        
+        return Response(
+            content=json.dumps(result, ensure_ascii=True),
+            media_type="application/json",
+            headers={
+                "Cache-Control": f"public, max-age={cache_seconds}",
+            }
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
