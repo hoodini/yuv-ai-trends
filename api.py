@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Optional
@@ -6,10 +6,11 @@ import sys
 import io
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
 from dotenv import load_dotenv
+from rss_store import get_rss_store, RSSStore
 
 # Load environment variables from .env file
 load_dotenv()
@@ -425,77 +426,91 @@ async def check_summaries(request: PopulateRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def generate_rss_xml(items: List[Dict], title: str, description: str, link: str) -> str:
-    """Generate RSS 2.0 XML from news items"""
+def generate_rss_xml(
+    items: List[Dict], 
+    title: str, 
+    description: str, 
+    link: str,
+    self_link: str = None,
+    digest_type: str = "daily"
+) -> str:
+    """
+    Generate RSS 2.0 XML from stored items
+    
+    Items are expected to have:
+    - guid: unique identifier
+    - title: item title (repo name)
+    - url: link to the item
+    - description: clean text description
+    - discovered_at: ISO timestamp when first seen
+    - source: github_trending, hf_papers, etc.
+    - digest_type: daily, weekly, monthly
+    """
     rss = Element('rss', version='2.0')
     rss.set('xmlns:atom', 'http://www.w3.org/2005/Atom')
     
     channel = SubElement(rss, 'channel')
     
-    # Channel metadata
-    SubElement(channel, 'title').text = title
-    SubElement(channel, 'description').text = description
+    # Channel metadata with digest type info
+    full_title = f"{title} ({digest_type.title()})"
+    SubElement(channel, 'title').text = full_title
+    SubElement(channel, 'description').text = f"{description} Digest type: {digest_type}"
     SubElement(channel, 'link').text = link
     SubElement(channel, 'language').text = 'en-us'
     SubElement(channel, 'lastBuildDate').text = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
     SubElement(channel, 'generator').text = 'YUV AI Trends'
     
+    # TTL (time to live) - how often to check for updates (in minutes)
+    ttl_minutes = {'daily': 60, 'weekly': 360, 'monthly': 1440}.get(digest_type, 60)
+    SubElement(channel, 'ttl').text = str(ttl_minutes)
+    
+    # Custom element for digest type (Make.com can read this)
+    SubElement(channel, 'category').text = f"digest:{digest_type}"
+    
     # Atom self link
     atom_link = SubElement(channel, 'atom:link')
-    atom_link.set('href', f'{link}/rss.xml')
+    atom_link.set('href', self_link or f'{link}/rss.xml')
     atom_link.set('rel', 'self')
     atom_link.set('type', 'application/rss+xml')
     
-    # Add items
-    for item in items[:50]:  # Limit to 50 items
+    # Add items (already formatted from RSSStore)
+    for item in items[:50]:
         entry = SubElement(channel, 'item')
         
-        # Title
-        item_title = item.get('name') or item.get('title') or 'Untitled'
-        SubElement(entry, 'title').text = item_title
+        # Title - This maps to {{1.title}} in Make.com
+        SubElement(entry, 'title').text = item.get('title', 'Untitled')
         
-        # Link
-        item_link = item.get('url') or item.get('html_url') or ''
-        SubElement(entry, 'link').text = item_link
+        # Link - This maps to {{1.url}} in Make.com
+        SubElement(entry, 'link').text = item.get('url', '')
         
-        # GUID
+        # GUID - Unique identifier for Make.com to track new items
         guid = SubElement(entry, 'guid')
-        guid.text = item_link
-        guid.set('isPermaLink', 'true')
+        guid.text = item.get('guid') or item.get('url', '')
+        guid.set('isPermaLink', 'true' if item.get('url') else 'false')
         
-        # Description
-        desc_parts = []
-        if item.get('ai_summary'):
-            desc_parts.append(f"<p><strong>AI Summary:</strong> {item['ai_summary']}</p>")
-        if item.get('description'):
-            desc_parts.append(f"<p>{item['description']}</p>")
+        # Description - This maps to {{1.description}} in Make.com
+        # Keep it clean text for easy processing
+        SubElement(entry, 'description').text = item.get('description', '')
         
-        # Add metadata
-        meta = []
-        if item.get('stars'):
-            meta.append(f"Stars: {item['stars']:,}")
-        if item.get('forks'):
-            meta.append(f"Forks: {item['forks']:,}")
-        if item.get('language'):
-            meta.append(f"Lang: {item['language']}")
-        if item.get('upvotes'):
-            meta.append(f"Upvotes: {item['upvotes']}")
-        if item.get('likes'):
-            meta.append(f"Likes: {item['likes']}")
-        if meta:
-            desc_parts.append(f"<p>{' | '.join(meta)}</p>")
+        # Category for source
+        SubElement(entry, 'category').text = item.get('source', 'unknown')
         
-        # Source badge
-        source = item.get('source', 'unknown')
-        desc_parts.append(f"<p><em>Source: {source}</em></p>")
+        # Second category for digest type
+        SubElement(entry, 'category').text = f"digest:{item.get('digest_type', digest_type)}"
         
-        SubElement(entry, 'description').text = ''.join(desc_parts) if desc_parts else item_title
+        # PubDate - CRITICAL: Use the actual discovery time, not "now"
+        # This is how Make.com detects NEW items
+        discovered_at = item.get('discovered_at')
+        if discovered_at:
+            try:
+                dt = datetime.fromisoformat(discovered_at.replace('Z', '+00:00'))
+                pub_date = dt.strftime('%a, %d %b %Y %H:%M:%S +0000')
+            except ValueError:
+                pub_date = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
+        else:
+            pub_date = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
         
-        # Category/Source
-        SubElement(entry, 'category').text = source
-        
-        # Pub date (use current time if not available)
-        SubElement(entry, 'pubDate').text = datetime.now(timezone.utc).strftime('%a, %d %b %Y %H:%M:%S +0000')
+        SubElement(entry, 'pubDate').text = pub_date
     
     # Pretty print XML
     xml_str = tostring(rss, encoding='unicode')
@@ -505,10 +520,149 @@ def generate_rss_xml(items: List[Dict], title: str, description: str, link: str)
 @app.get("/rss.xml")
 @app.get("/api/rss")
 @app.get("/feed")
-async def get_rss_feed(time_range: str = "daily", limit: int = 30):
-    """Generate RSS feed of trending AI/ML content"""
+async def get_rss_feed(
+    time_range: str = Query("daily", description="Digest type: daily, weekly, or monthly"),
+    limit: int = Query(30, description="Maximum items to return"),
+    refresh: bool = Query(False, description="Force fetch new items from sources")
+):
+    """
+    Generate RSS feed of trending AI/ML content.
+    
+    Make.com Integration:
+    - Items have stable GUIDs (URLs) so Make.com can track new vs seen items
+    - pubDate reflects when item was FIRST discovered, not current time
+    - Each item has: title, url (link), description - maps directly to Make.com fields
+    - Feed includes digest type in channel category
+    
+    Query params:
+    - time_range: 'daily' (default), 'weekly', or 'monthly'
+    - limit: max items (default 30)
+    - refresh: set to true to fetch fresh data from sources
+    """
     try:
-        # Initialize fetchers
+        store = get_rss_store()
+        
+        # Check if we need to fetch new items
+        # Refresh if: forced, or store is empty, or last item is old
+        should_fetch = refresh
+        
+        existing_items = store.get_items(digest_type=time_range, limit=1)
+        if not existing_items:
+            should_fetch = True
+        elif existing_items:
+            # Check if newest item is older than threshold
+            try:
+                newest = datetime.fromisoformat(
+                    existing_items[0]['discovered_at'].replace('Z', '+00:00')
+                )
+                threshold_hours = {'daily': 1, 'weekly': 6, 'monthly': 24}.get(time_range, 1)
+                if datetime.now(timezone.utc) - newest > timedelta(hours=threshold_hours):
+                    should_fetch = True
+            except (KeyError, ValueError):
+                should_fetch = True
+        
+        if should_fetch:
+            # Fetch fresh data from sources
+            github_trending = GitHubTrendingFetcher()
+            github_explore = GitHubExploreFetcher()
+            hf_fetcher = HuggingFaceFetcher()
+            ranker = ContentRanker()
+            
+            time_range_days = config.TIME_RANGES.get(time_range, 1)
+            all_items = []
+            
+            # Fetch from all sources
+            try:
+                gh_time_range = time_range if time_range in ['daily', 'weekly', 'monthly'] else 'daily'
+                github_repos = github_trending.fetch_all_languages(since=gh_time_range)
+                github_repos = [sanitize_dict(repo) for repo in github_repos]
+                all_items.extend(github_repos)
+            except Exception:
+                pass
+            
+            try:
+                collections = github_explore.fetch_collections()
+                collections = [sanitize_dict(c) for c in collections]
+                all_items.extend(collections)
+            except Exception:
+                pass
+            
+            try:
+                papers = hf_fetcher.fetch_papers(limit=20)
+                papers = [sanitize_dict(p) for p in papers]
+                all_items.extend(papers)
+            except Exception:
+                pass
+            
+            try:
+                spaces = hf_fetcher.fetch_trending_spaces(limit=15)
+                spaces = [sanitize_dict(s) for s in spaces]
+                all_items.extend(spaces)
+            except Exception:
+                pass
+            
+            if all_items:
+                # Rank items
+                ranked_items = ranker.rank_items(all_items, days_range=time_range_days)
+                top_items = ranker.get_top_items(ranked_items, limit=50)
+                
+                # Add to persistent store (only truly new items get added)
+                new_items = store.add_items(top_items, digest_type=time_range)
+                # Log how many new items were found
+                if new_items:
+                    print(f"RSS: Found {len(new_items)} new items for {time_range} digest")
+        
+        # Get items from store
+        items = store.get_items(digest_type=time_range, limit=limit)
+        
+        if not items:
+            # Fallback: return empty feed
+            rss_xml = generate_rss_xml(
+                [],
+                title="YUV AI Trends",
+                description="No items available",
+                link="https://trends.yuv.ai",
+                digest_type=time_range
+            )
+        else:
+            # Generate RSS
+            rss_xml = generate_rss_xml(
+                items,
+                title="YUV AI Trends",
+                description="Curated AI & ML trends from GitHub, Hugging Face, and more.",
+                link="https://trends.yuv.ai",
+                self_link=f"https://yuv-ai-trends-api.onrender.com/rss.xml?time_range={time_range}",
+                digest_type=time_range
+            )
+        
+        # Cache header based on digest type
+        cache_seconds = {'daily': 3600, 'weekly': 21600, 'monthly': 86400}.get(time_range, 3600)
+        
+        return Response(
+            content=rss_xml,
+            media_type="application/rss+xml",
+            headers={
+                "Cache-Control": f"public, max-age={cache_seconds}",
+            }
+        )
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/rss/refresh")
+async def refresh_rss_feed(time_range: str = "daily"):
+    """
+    Manually trigger an RSS feed refresh.
+    This fetches new items from sources and adds them to the store.
+    Returns statistics about what was found.
+    """
+    try:
+        store = get_rss_store()
+        
+        # Fetch fresh data
         github_trending = GitHubTrendingFetcher()
         github_explore = GitHubExploreFetcher()
         hf_fetcher = HuggingFaceFetcher()
@@ -517,7 +671,6 @@ async def get_rss_feed(time_range: str = "daily", limit: int = 30):
         time_range_days = config.TIME_RANGES.get(time_range, 1)
         all_items = []
         
-        # Fetch from all sources (without AI summaries for speed)
         try:
             gh_time_range = time_range if time_range in ['daily', 'weekly', 'monthly'] else 'daily'
             github_repos = github_trending.fetch_all_languages(since=gh_time_range)
@@ -548,33 +701,48 @@ async def get_rss_feed(time_range: str = "daily", limit: int = 30):
             pass
         
         if not all_items:
-            # Return empty feed
-            rss_xml = generate_rss_xml([], "YUV AI Trends", "No items available", "https://trends.yuv.ai")
-            return Response(content=rss_xml, media_type="application/rss+xml")
+            return Response(
+                content=json.dumps({
+                    'success': False,
+                    'message': 'Could not fetch any items from sources'
+                }, ensure_ascii=True),
+                media_type="application/json"
+            )
         
-        # Rank and get top items
+        # Rank and add to store
         ranked_items = ranker.rank_items(all_items, days_range=time_range_days)
-        top_items = ranker.get_top_items(ranked_items, limit=limit)
-        
-        # Generate RSS
-        rss_xml = generate_rss_xml(
-            top_items,
-            title="YUV AI Trends",
-            description="Curated AI & ML trends from GitHub, Hugging Face, and more. Updated daily.",
-            link="https://trends.yuv.ai"
-        )
+        top_items = ranker.get_top_items(ranked_items, limit=50)
+        new_items = store.add_items(top_items, digest_type=time_range)
         
         return Response(
-            content=rss_xml,
-            media_type="application/rss+xml",
-            headers={
-                "Cache-Control": "public, max-age=3600",  # Cache for 1 hour
-            }
+            content=json.dumps({
+                'success': True,
+                'fetched': len(all_items),
+                'ranked': len(top_items),
+                'new_items': len(new_items),
+                'new_item_titles': [item['title'] for item in new_items[:10]],
+                'message': f'Found {len(new_items)} new items for {time_range} digest'
+            }, ensure_ascii=True),
+            media_type="application/json"
         )
         
     except Exception as e:
         import traceback
         traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/rss/stats")
+async def get_rss_stats():
+    """Get statistics about the RSS store"""
+    try:
+        store = get_rss_store()
+        stats = store.get_stats()
+        return Response(
+            content=json.dumps(stats, ensure_ascii=True),
+            media_type="application/json"
+        )
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

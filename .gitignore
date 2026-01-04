@@ -16,3 +16,5 @@ output/*.html
 .vscode/
 .idea/
 *.log
+# RSS persistent store (contains runtime data)
+rss_store.json
